@@ -1,0 +1,18 @@
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/
+
+# Vercel
+.vercel
+
+# Node (only relevant if you ever add tooling)
+node_modules/
+npm-debug.log*
+
+# Local env files (see .env.example — not required for this project,
+# only relevant if you use the optional scripts/inject-env.js workflow)
+.env
+.env.local

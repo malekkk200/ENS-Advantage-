@@ -1,0 +1,233 @@
+/* ═══════════════════════════════════════════════════════════════
+   SECURE CANVAS-BASED PDF VIEWER (toolbar, canvas, watermark, skeleton loader, security notice)
+═══════════════════════════════════════════════════════════════ */
+
+  /* ══════════════════════════════════════════════════════════════
+     SECURE PDF VIEWER OVERLAY
+     Canvas-based renderer via PDF.js — no browser PDF toolbar,
+     no download button, no "open in new tab" option exposed.
+  ══════════════════════════════════════════════════════════════ */
+
+  /* Full-screen backdrop */
+  .pdf-overlay-bg {
+    position: fixed; inset: 0;
+    background: rgba(5, 12, 28, 0.88);
+    z-index: 600;
+    display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+
+  /* Viewer shell — full-screen, edge-to-edge (Google-Drive-style chrome).
+     No max-width/max-height/border-radius: the overlay itself occupies
+     the entire viewport. The PDF *page* inside is still rendered at a
+     comfortable reading width (see _fitWidthScale in pdfViewer.js),
+     not stretched to fill a wide desktop window — only the surrounding
+     chrome is full-screen. */
+  .pdf-viewer-shell {
+    background: #0f172a;
+    width: 100vw; height: 100vh;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Top toolbar */
+  .pdf-toolbar {
+    background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 100%);
+    padding: .85rem 1.25rem;
+    display: flex; align-items: center; gap: .75rem;
+    border-bottom: 1px solid rgba(255,255,255,.07);
+    flex-shrink: 0;
+    min-height: 60px;
+  }
+
+  .pdf-title-block { flex: 1; min-width: 0; }
+  .pdf-doc-name {
+    font-size: .88rem; font-weight: 700; color: white;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .pdf-doc-type {
+    font-size: .7rem; color: #64748b; margin-top: 2px;
+    text-transform: uppercase; letter-spacing: .06em; font-weight: 600;
+  }
+
+  .pdf-nav-group {
+    display: flex; align-items: center; gap: .4rem; flex-shrink: 0;
+  }
+
+  .pdf-nav-btn {
+    width: 30px; height: 30px;
+    border: 1px solid rgba(255,255,255,.14);
+    background: rgba(255,255,255,.07);
+    color: white; border-radius: var(--radius-sm);
+    cursor: pointer; font-size: .85rem; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    transition: background .15s, border-color .15s;
+    font-family: 'Inter', sans-serif;
+    user-select: none;
+  }
+  .pdf-nav-btn:hover:not(:disabled) { background: rgba(255,255,255,.14); border-color: rgba(255,255,255,.25); }
+  .pdf-nav-btn:disabled { opacity: .3; cursor: not-allowed; }
+
+  .pdf-page-pill {
+    font-size: .78rem; color: #94a3b8; font-weight: 600;
+    white-space: nowrap; min-width: 52px; text-align: center;
+  }
+
+  /* Editable "go to page" control — replaces a static page pill so
+     users can type/tap in any page number and jump straight there. */
+  .pdf-page-input-group {
+    display: flex; align-items: center; gap: .3rem;
+    font-size: .78rem; color: #94a3b8; font-weight: 600;
+    white-space: nowrap;
+  }
+  .pdf-page-input {
+    width: 42px;
+    background: rgba(255,255,255,.07);
+    border: 1px solid rgba(255,255,255,.14);
+    color: white;
+    border-radius: var(--radius-sm);
+    text-align: center;
+    font-size: .78rem; font-weight: 700;
+    font-family: 'Inter', sans-serif;
+    padding: .3rem .2rem;
+    /* Hide native spinner arrows so it reads like a compact pill */
+    -moz-appearance: textfield;
+  }
+  .pdf-page-input::-webkit-outer-spin-button,
+  .pdf-page-input::-webkit-inner-spin-button {
+    -webkit-appearance: none; margin: 0;
+  }
+  .pdf-page-input:focus {
+    outline: none;
+    border-color: var(--gold);
+    background: rgba(255,255,255,.12);
+  }
+  .pdf-page-input:disabled { opacity: .4; }
+  .pdf-page-total { color: #64748b; }
+
+  .pdf-zoom-group {
+    display: flex; align-items: center; gap: .4rem; flex-shrink: 0;
+  }
+
+  .pdf-close-btn {
+    width: 30px; height: 30px; border: none;
+    background: rgba(239,68,68,.18); color: #f87171;
+    border-radius: var(--radius-sm); cursor: pointer; font-size: 1rem;
+    display: flex; align-items: center; justify-content: center;
+    transition: background .15s; flex-shrink: 0;
+    font-family: 'Inter', sans-serif;
+  }
+  .pdf-close-btn:hover { background: rgba(239,68,68,.35); }
+
+  /* Scrollable canvas area */
+  .pdf-canvas-zone {
+    flex: 1; overflow-y: auto; overflow-x: hidden;
+    background: #070f1f;
+    position: relative;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 1.5rem 1rem 2rem;
+    /* Disable selection inside the viewer */
+    -webkit-user-select: none; user-select: none;
+    /* Disable system drag */
+    -webkit-user-drag: none;
+  }
+  .pdf-canvas-zone::-webkit-scrollbar { width: 5px; }
+  .pdf-canvas-zone::-webkit-scrollbar-track { background: #070f1f; }
+  .pdf-canvas-zone::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
+
+  /* Stacked pages — continuous vertical scroll, populated dynamically
+     with one .pdf-page-wrapper per page (see PDFViewer._buildPages) */
+  .pdf-pages-container {
+    display: flex; flex-direction: column; align-items: center;
+    gap: 14px; /* visual separation between pages, like Google Drive */
+    width: 100%;
+  }
+
+  .pdf-page-wrapper {
+    position: relative; display: block;
+    border-radius: 4px; overflow: hidden;
+    box-shadow: 0 8px 40px rgba(0,0,0,.6);
+    background: #0b1424; /* placeholder color while a page hasn't rasterized yet */
+    flex-shrink: 0; /* preserve each page's own computed height while stacked */
+  }
+
+  .pdf-page-canvas {
+    display: block;
+    width: 100%; height: 100%;
+    /* Explicitly forbid context menu on canvas */
+    pointer-events: auto;
+  }
+
+  /* Translucent watermark tiled over each page's canvas */
+  .pdf-watermark-layer {
+    position: absolute; inset: 0;
+    pointer-events: none; overflow: hidden;
+    z-index: 3;
+  }
+  .pdf-wm-text {
+    position: absolute;
+    font-size: 11px; font-weight: 700;
+    color: rgba(255,255,255,.055);
+    white-space: nowrap;
+    transform: rotate(-32deg);
+    transform-origin: center;
+    letter-spacing: .05em;
+    font-family: 'Inter', sans-serif;
+    user-select: none; pointer-events: none;
+  }
+
+  /* Blur every page when the window loses focus (screenshot deterrent) */
+  .pdf-canvas-zone.blurred .pdf-pages-container { filter: blur(14px) brightness(.4); }
+  .pdf-canvas-zone.blurred::after {
+    content: '🔒 Resume viewing inside the platform';
+    position: fixed; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(15,31,61,.92); color: white;
+    padding: .9rem 1.5rem; border-radius: var(--radius-lg);
+    font-size: .9rem; font-weight: 700; white-space: nowrap;
+    border: 1px solid rgba(255,255,255,.1);
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  /* ── Skeleton loader ── */
+  .pdf-skeleton-zone {
+    display: flex; flex-direction: column; align-items: center; gap: .75rem;
+    padding: 2rem 1rem; width: 100%;
+  }
+  .pdf-skel-bar {
+    border-radius: 6px;
+    background: linear-gradient(90deg, #1e293b 25%, #263347 50%, #1e293b 75%);
+    background-size: 400% 100%;
+    animation: pdfSkelShimmer 1.4s ease-in-out infinite;
+  }
+  @keyframes pdfSkelShimmer {
+    0%   { background-position: 100% 50%; }
+    100% { background-position:   0% 50%; }
+  }
+
+  /* ── Error state ── */
+  .pdf-error-zone {
+    display: flex; flex-direction: column; align-items: center;
+    gap: .85rem; padding: 3.5rem 2rem; color: #64748b; text-align: center;
+  }
+  .pdf-err-icon { font-size: 2.5rem; }
+  .pdf-err-msg  { font-size: .9rem; color: #94a3b8; max-width: 300px; line-height: 1.6; }
+
+  /* ── Security notice strip at the bottom ── */
+  .pdf-security-strip {
+    flex-shrink: 0;
+    background: rgba(0,0,0,.4);
+    border-top: 1px solid rgba(255,255,255,.05);
+    padding: .45rem 1.25rem;
+    display: flex; align-items: center; justify-content: center; gap: .5rem;
+    font-size: .68rem; color: #334155; font-weight: 600; letter-spacing: .03em;
+    text-transform: uppercase; user-select: none;
+  }
+
+  @media (max-width: 640px) {
+    .pdf-zoom-group { display: none; }
+    .pdf-toolbar { padding: .65rem 1rem; gap: .5rem; }
+  }
+

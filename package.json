@@ -1,0 +1,9 @@
+{
+  "name": "ens-advantage",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ENS Advantage — academic platform for ENS English Department students",
+  "scripts": {
+    "inject-env": "node scripts/inject-env.js"
+  }
+}

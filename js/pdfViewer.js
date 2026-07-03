@@ -1,0 +1,536 @@
+/* ═══════════════════════════════════════════════════════════════
+   SECURE PDF VIEWER — continuous vertical scroll
+   ───────────────────────────────────────────────────────────────
+   Canvas-based PDF renderer (primary content-delivery path). PDF.js
+   (window.pdfjsLib) is loaded via the UMD CDN <script> tag in
+   index.html. Uses its own internal `_el()` DOM helper rather than
+   the shared `$` from dom.js — kept as-is from the original file.
+
+   Renders every page as its own <canvas> inside a stacked
+   `.pdf-pages-container`, so the whole document scrolls naturally
+   with one continuous finger-drag/wheel gesture (like Google Drive)
+   instead of a one-page-at-a-time carousel. Pages are lazily
+   rendered via IntersectionObserver as they approach the viewport —
+   important for longer PDFs, since rasterizing 100+ pages up front
+   would be slow and memory-heavy for no benefit.
+═══════════════════════════════════════════════════════════════ */
+import { sb } from './supabaseClient.js';
+import { State } from './state.js';
+
+// Initialise the PDF.js worker source immediately — this avoids a
+// small delay on first open because the worker script starts loading
+// in the background as soon as the module is parsed.
+if (window.pdfjsLib) {
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+
+/* ─────────────────────────────────────────────────────────────
+   SECURE PDF VIEWER
+   ─────────────────────────────────────────────────────────────
+   Architecture:
+     1. open() → immediately shows skeleton + the overlay
+     2. _fetchSignedUrl() → calls supabase.storage.createSignedUrl()
+        with a 90-second TTL. The storage RLS policy is the gate —
+        a denied user gets an error, never a URL.
+     3. _loadPdf() → passes the signed URL to PDF.js getDocument().
+        PDF.js streams the file; the raw bytes never appear in the
+        DOM as a blob or data-URI — they live only in PDF.js' own
+        internal buffer.
+     4. _buildPages() → creates one wrapper+canvas per page, sized
+        from that page's real aspect ratio, and wires an
+        IntersectionObserver that renders each page's canvas only
+        once it scrolls near the viewport.
+     5. A scroll listener (rAF-throttled) tracks which page is
+        currently in view, to keep the page-number field and the
+        "resume where you left off" position in sync as the user
+        scrolls — not just when they tap next/prev.
+     6. Focus/visibility listeners blur the whole pages container
+        when the window loses focus, making screenshots harder and
+        signalling users they should stay inside the platform.
+     7. Watermark tiles are painted per-page as absolute-positioned
+        text nodes over each canvas with pointer-events:none so they
+        can't be removed by selecting and deleting a DOM node — the
+        canvas itself has no text to select.
+───────────────────────────────────────────────────────────── */
+export const PDFViewer = (() => {
+  // ── Internal state ────────────────────────────────────────
+  let _pdfDoc      = null;   // pdf.js PDFDocumentProxy
+  let _curPage     = 1;      // the page currently most visible in the scroll viewport
+  let _totalPages  = 0;
+  let _zoomLevel   = 1.0;    // multiplier on top of "fit-width" base scale
+  let _baseScale   = 1.0;    // computed once per document load, from page 1
+  let _materialId  = null;   // current document's DB id — used as the reading-progress key
+  let _pages       = [];     // [{ wrapper, canvas, wm, rendered, width, height }] — index 0 = page 1
+  let _observer    = null;   // IntersectionObserver — lazy-renders pages as they approach view
+  let _scrollRaf   = null;   // rAF handle for the throttled scroll handler
+  let _saveTimer   = null;   // debounce handle for progress-saving while scrolling
+  let _programmaticScroll = false; // true while we're scrolling the zone ourselves (goto/resume)
+  const ZOOM_STEPS = [0.5, 0.6, 0.75, 0.9, 1.0, 1.15, 1.3, 1.5, 1.75, 2.0];
+  const RENDER_MARGIN = '1200px 0px'; // preload ~1.5 screens above/below the viewport
+
+  // ── Private helpers ───────────────────────────────────────
+  function _el(id)  { return document.getElementById(id); }
+
+  function _showState(state) {
+    // state: 'skeleton' | 'error' | 'pages'
+    _el('pdf-skeleton').classList.toggle('hidden', state !== 'skeleton');
+    _el('pdf-error').classList.toggle('hidden', state !== 'error');
+    _el('pdf-pages-container').classList.toggle('hidden', state !== 'pages');
+  }
+
+  function _setError(msg) {
+    _el('pdf-err-msg').textContent = msg || 'Could not load document.';
+    _showState('error');
+  }
+
+  /* ── Reading-progress persistence ──────────────────────────
+     "Resume where you left off" — keyed per user *and* per document
+     so it can't leak across accounts on a shared/public browser.
+     Stored client-side (localStorage) rather than in Supabase: it's
+     a pure convenience feature with no access-control implications,
+     so a lightweight client-only implementation is the right amount
+     of complexity here. (If cross-device sync is ever wanted, this
+     is the one function that would need to become a Supabase write.) */
+  function _progressKey(materialId) {
+    const userId = State.currentUser?.id || 'anon';
+    return `pdfProgress:${userId}:${materialId}`;
+  }
+
+  function _loadSavedPage(materialId, totalPages) {
+    try {
+      const raw = localStorage.getItem(_progressKey(materialId));
+      if (!raw) return 1;
+      const saved = parseInt(raw, 10);
+      if (!Number.isFinite(saved) || saved < 1) return 1;
+      // Clamp in case the document was replaced with a shorter one
+      return Math.min(saved, totalPages || saved);
+    } catch {
+      return 1; // localStorage unavailable (private browsing, quota, etc.) — fail open
+    }
+  }
+
+  function _saveProgress(materialId, page) {
+    if (!materialId) return;
+    try {
+      localStorage.setItem(_progressKey(materialId), String(page));
+    } catch {
+      // Non-fatal — reading still works, it just won't resume next time
+    }
+  }
+
+  function _scheduleSaveProgress() {
+    if (_saveTimer) clearTimeout(_saveTimer);
+    _saveTimer = setTimeout(() => _saveProgress(_materialId, _curPage), 400);
+  }
+
+  /**
+   * Compute a base scale that makes the page fit the viewer's width.
+   * On large/full-screen viewports we deliberately cap the page's
+   * rendered width at a comfortable reading size (like Google Drive's
+   * viewer) instead of stretching a single page edge-to-edge across a
+   * wide desktop monitor — only the surrounding chrome is full-screen.
+   * On narrow (mobile) viewports the full available width is used.
+   */
+  function _fitWidthScale(viewport) {
+    const zone       = _el('pdf-canvas-zone');
+    const rawAvail   = (zone?.clientWidth || 800) - 40; // 20px padding each side
+    const MAX_READING_WIDTH = 900; // px — comfortable reading column on large screens
+    const avail      = Math.min(rawAvail, MAX_READING_WIDTH);
+    return Math.max(0.5, avail / viewport.width);
+  }
+
+  function _updatePagePill() {
+    const input = _el('pdf-page-input');
+    if (input) {
+      // Don't fight the user while they're actively typing in the field
+      if (document.activeElement !== input) input.value = _curPage;
+      input.max = _totalPages || 1;
+      input.disabled = !_totalPages;
+    }
+    const totalEl = _el('pdf-page-total-num');
+    if (totalEl) totalEl.textContent = _totalPages || '—';
+    _el('pdf-btn-prev').disabled = _curPage <= 1;
+    _el('pdf-btn-next').disabled = _curPage >= _totalPages;
+  }
+
+  function _updateZoomLabel() {
+    _el('pdf-zoom-label').textContent = Math.round(_zoomLevel * 100) + '%';
+  }
+
+  /** Build the tiled user-identity watermark inside one page's layer */
+  function _buildWatermarkInto(layer) {
+    layer.innerHTML = '';
+    if (!State.currentUser || !State.currentProfile) return;
+
+    const name  = `${State.currentProfile.first_name || ''} ${State.currentProfile.last_name || ''}`.trim();
+    const email = State.currentUser.email || '';
+    const text  = name ? `${name}  ·  ${email}` : email;
+
+    // Tile across the layer: 7 rows × 3 columns, offset every other row
+    const rows = 7, cols = 3;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const el = document.createElement('div');
+        el.className = 'pdf-wm-text';
+        el.textContent = text;
+        el.style.top  = (r * 140 + (c % 2 === 0 ? 30 : 100)) + 'px';
+        el.style.left = (c * 200 - 40) + 'px';
+        layer.appendChild(el);
+      }
+    }
+  }
+
+  /** Actually rasterize one page's canvas — called lazily by the IntersectionObserver */
+  async function _renderPageEntry(entry) {
+    if (entry.rendered || !_pdfDoc) return;
+    entry.rendered = true; // set immediately so overlapping observer callbacks don't double-render
+    try {
+      const page      = await _pdfDoc.getPage(entry.num);
+      const scale     = _baseScale * _zoomLevel;
+      const viewport  = page.getViewport({ scale });
+
+      const canvas    = entry.canvas;
+      const ctx       = canvas.getContext('2d');
+      // Cap at 3x rather than 2x — most modern phones run 2.5–3x device
+      // pixel ratio, and capping too low is exactly what makes a canvas
+      // PDF viewer look "downgraded" compared to a native PDF reader.
+      const dpr       = Math.min(window.devicePixelRatio || 1, 3);
+      canvas.width    = viewport.width  * dpr;
+      canvas.height   = viewport.height * dpr;
+      canvas.style.width  = viewport.width  + 'px';
+      canvas.style.height = viewport.height + 'px';
+      ctx.scale(dpr, dpr);
+
+      await page.render({ canvasContext: ctx, viewport }).promise;
+    } catch (err) {
+      console.error('[PDFViewer] page render failed:', entry.num, err);
+      entry.rendered = false; // allow a retry if it scrolls back into view
+    }
+  }
+
+  /** Tear down the current document's DOM/observer/listeners before loading a new one (or closing) */
+  function _clearPages() {
+    if (_observer) { _observer.disconnect(); _observer = null; }
+    const container = _el('pdf-pages-container');
+    if (container) container.innerHTML = '';
+    _pages = [];
+  }
+
+  /**
+   * Build one wrapper+canvas+watermark per page (sized from that
+   * page's real dimensions, scaled uniformly with page 1's base
+   * scale), then wire the IntersectionObserver that lazily renders
+   * each canvas as it nears the viewport.
+   */
+  async function _buildPages() {
+    const container = _el('pdf-pages-container');
+    container.innerHTML = '';
+    _pages = [];
+
+    // Base scale is derived once from page 1 and applied to every
+    // page — this keeps the reading column a consistent width even
+    // if a handful of pages have slightly different intrinsic sizes.
+    const firstPage = await _pdfDoc.getPage(1);
+    _baseScale = _fitWidthScale(firstPage.getViewport({ scale: 1 }));
+
+    for (let n = 1; n <= _totalPages; n++) {
+      const page     = await _pdfDoc.getPage(n);
+      const scale    = _baseScale * _zoomLevel;
+      const viewport = page.getViewport({ scale });
+
+      const wrapper = document.createElement('div');
+      wrapper.className = 'pdf-page-wrapper';
+      wrapper.style.width  = viewport.width  + 'px';
+      wrapper.style.height = viewport.height + 'px';
+      wrapper.dataset.pageNum = String(n);
+
+      const canvas = document.createElement('canvas');
+      canvas.className = 'pdf-page-canvas';
+      wrapper.appendChild(canvas);
+
+      const wm = document.createElement('div');
+      wm.className = 'pdf-watermark-layer';
+      wrapper.appendChild(wm);
+      _buildWatermarkInto(wm); // watermark doesn't depend on render state
+
+      container.appendChild(wrapper);
+      _pages.push({ num: n, wrapper, canvas, rendered: false });
+    }
+
+    // Lazy render: start rasterizing a page once it's within
+    // RENDER_MARGIN of the visible scroll area.
+    _observer = new IntersectionObserver((entries) => {
+      for (const ioEntry of entries) {
+        if (!ioEntry.isIntersecting) continue;
+        const num = parseInt(ioEntry.target.dataset.pageNum, 10);
+        const entry = _pages[num - 1];
+        if (entry) _renderPageEntry(entry);
+      }
+    }, { root: _el('pdf-canvas-zone'), rootMargin: RENDER_MARGIN });
+
+    _pages.forEach(p => _observer.observe(p.wrapper));
+  }
+
+  /** Scroll the zone so a given page's wrapper is at the top */
+  function _scrollToPage(n) {
+    const entry = _pages[n - 1];
+    const zone  = _el('pdf-canvas-zone');
+    if (!entry || !zone) return;
+    _programmaticScroll = true;
+    zone.scrollTop = entry.wrapper.offsetTop - 12; // small gap so the top isn't flush with the toolbar
+    _curPage = n;
+    _updatePagePill();
+    _scheduleSaveProgress();
+    // Release the programmatic-scroll guard once the browser settles
+    requestAnimationFrame(() => requestAnimationFrame(() => { _programmaticScroll = false; }));
+  }
+
+  /** rAF-throttled scroll handler — tracks which page is "current" as the user scrolls freely */
+  function _onScroll() {
+    if (_programmaticScroll || _scrollRaf) return;
+    _scrollRaf = requestAnimationFrame(() => {
+      _scrollRaf = null;
+      const zone = _el('pdf-canvas-zone');
+      if (!zone || !_pages.length) return;
+      const pos = zone.scrollTop + 24; // small offset so the page just past the top counts as "current"
+      let current = _pages[0].num;
+      for (const p of _pages) {
+        if (p.wrapper.offsetTop <= pos) current = p.num;
+        else break;
+      }
+      if (current !== _curPage) {
+        _curPage = current;
+        _updatePagePill();
+        _scheduleSaveProgress();
+      }
+    });
+  }
+
+  /** Re-render already-visible pages and resize every placeholder after a zoom change */
+  async function _rerenderAfterZoom() {
+    const zone = _el('pdf-canvas-zone');
+    const anchorPage = _curPage; // keep the reading position stable across the resize
+
+    for (const entry of _pages) {
+      const page     = await _pdfDoc.getPage(entry.num);
+      const scale    = _baseScale * _zoomLevel;
+      const viewport = page.getViewport({ scale });
+      entry.wrapper.style.width  = viewport.width  + 'px';
+      entry.wrapper.style.height = viewport.height + 'px';
+      entry.rendered = false; // force a redraw at the new scale
+    }
+
+    _scrollToPage(anchorPage);
+
+    // Re-render whatever is now actually in/near the viewport at the new scale
+    for (const entry of _pages) {
+      const rect = entry.wrapper.getBoundingClientRect();
+      const zoneRect = zone.getBoundingClientRect();
+      if (rect.bottom > zoneRect.top - 1200 && rect.top < zoneRect.bottom + 1200) {
+        await _renderPageEntry(entry);
+      }
+    }
+  }
+
+  /** Event: blur the pages container when window loses focus */
+  function _onWindowBlur()  {
+    if (State.pdfViewerActive) _el('pdf-canvas-zone')?.classList.add('blurred');
+  }
+  function _onWindowFocus() {
+    _el('pdf-canvas-zone')?.classList.remove('blurred');
+  }
+  function _onVisibilityChange() {
+    if (document.hidden && State.pdfViewerActive) {
+      _el('pdf-canvas-zone')?.classList.add('blurred');
+    } else {
+      _el('pdf-canvas-zone')?.classList.remove('blurred');
+    }
+  }
+  // DevTools size-heuristic — same as Protection module
+  function _checkDevTools() {
+    if (!State.pdfViewerActive) return;
+    const diff = window.outerWidth - window.innerWidth;
+    if (diff > 160) _el('pdf-canvas-zone')?.classList.add('blurred');
+  }
+  let _devToolsTimer = null;
+
+  // ── Public API ────────────────────────────────────────────
+  return {
+
+    /**
+     * Main entry point.
+     * @param {object} mod       Module object { name, … }
+     * @param {string} type      'summary' | 'fullLesson' | 'guide'
+     * @param {object} material  { id, title, storagePath } from CourseMaterials.get()
+     */
+    async open(mod, type, material) {
+      // Set type label in toolbar
+      const typeLabels = {
+        summary:    'Free Summary',
+        fullLesson: 'Full Lesson',
+        guide:      'Comprehensive Guide'
+      };
+
+      _el('pdf-doc-name').textContent = material.title || mod.name;
+      _el('pdf-doc-type').textContent = typeLabels[type] || type;
+
+      // Reset viewer state
+      _clearPages();
+      _pdfDoc     = null;
+      _curPage    = 1;
+      _totalPages = 0;
+      _zoomLevel  = 1.0;
+      _materialId = material?.id ?? null;
+
+      const pageInput = _el('pdf-page-input');
+      if (pageInput) { pageInput.value = ''; pageInput.disabled = true; }
+      _el('pdf-page-total-num').textContent = '—';
+      _el('pdf-zoom-label').textContent = '100%';
+      _el('pdf-btn-prev').disabled = true;
+      _el('pdf-btn-next').disabled = true;
+      _el('pdf-canvas-zone').classList.remove('blurred');
+      _showState('skeleton');
+
+      // Show the overlay immediately so the user sees feedback at once
+      _el('pdf-overlay').classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+
+      State.pdfViewerActive = true;
+      State.contentViewerActive = false; // mutually exclusive with HTML viewer
+
+      // Attach window-focus / devtools / scroll listeners
+      window.addEventListener('blur', _onWindowBlur);
+      window.addEventListener('focus', _onWindowFocus);
+      document.addEventListener('visibilitychange', _onVisibilityChange);
+      _el('pdf-canvas-zone').addEventListener('scroll', _onScroll, { passive: true });
+      _devToolsTimer = setInterval(_checkDevTools, 1200);
+
+      // ── 1. Generate a short-lived signed URL (90 seconds) ──
+      // Storage RLS is evaluated here: if the user doesn't have
+      // the required subscription flag, Supabase returns an error
+      // and no URL is ever produced.
+      let signedUrl;
+      try {
+        const { data, error } = await sb.storage
+          .from('course-materials')
+          .createSignedUrl(material.storagePath, 90); // 90-second TTL
+
+        if (error || !data?.signedUrl) {
+          console.error('[PDFViewer] createSignedUrl error:', error?.message);
+          _setError('Access denied or content unavailable. Please verify your subscription.');
+          return;
+        }
+        signedUrl = data.signedUrl;
+      } catch (err) {
+        console.error('[PDFViewer] Network error during signed URL generation:', err);
+        _setError('Network error. Please check your connection and try again.');
+        return;
+      }
+
+      // ── 2. Load the PDF via PDF.js ─────────────────────────
+      try {
+        // Point the worker at the same CDN version as the main script
+        if (window.pdfjsLib) {
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+            'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        }
+
+        const loadingTask = window.pdfjsLib.getDocument({
+          url:          signedUrl,
+          // Prevents browser from caching the signed URL response
+          httpHeaders:  { 'Cache-Control': 'no-store' },
+          // Standard CMap support for non-Latin character sets
+          cMapUrl:      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+          cMapPacked:   true,
+          // Stream the file progressively — don't wait for full download
+          disableRange:  false,
+          disableStream: false,
+          // Disable the text layer (nothing selectable) and annotation layer
+          // (no internal hyperlinks rendered that could hint at structure)
+        });
+
+        _pdfDoc     = await loadingTask.promise;
+        _totalPages = _pdfDoc.numPages;
+
+        // Build every page's wrapper/canvas/watermark up front (sized
+        // correctly from real dimensions) and start the lazy-render
+        // observer — this is what makes the continuous scroll work.
+        await _buildPages();
+
+        _showState('pages');
+        _updatePagePill();
+
+        // Resume from wherever the user last left off in this document
+        const startPage = _loadSavedPage(_materialId, _totalPages);
+        _scrollToPage(startPage);
+
+      } catch (err) {
+        console.error('[PDFViewer] PDF.js load error:', err);
+        if (err?.name === 'InvalidPDFException') {
+          _setError('Invalid or corrupted document. Please contact support.');
+        } else if (err?.name === 'MissingPDFException' || err?.status === 403) {
+          _setError('Document link expired. Please close and reopen the content.');
+        } else {
+          _setError('Failed to load document. Please try again.');
+        }
+      }
+    },
+
+    close() {
+      _el('pdf-overlay').classList.add('hidden');
+      document.body.style.overflow = '';
+      State.pdfViewerActive = false;
+
+      // Destroy the PDF document to release memory
+      if (_pdfDoc) {
+        _pdfDoc.destroy();
+        _pdfDoc = null;
+      }
+      _clearPages();
+      _showState('skeleton'); // reset for next open
+      _materialId = null;
+
+      // Remove focus / devtools / scroll listeners
+      window.removeEventListener('blur', _onWindowBlur);
+      window.removeEventListener('focus', _onWindowFocus);
+      document.removeEventListener('visibilitychange', _onVisibilityChange);
+      _el('pdf-canvas-zone')?.removeEventListener('scroll', _onScroll);
+      if (_devToolsTimer) { clearInterval(_devToolsTimer); _devToolsTimer = null; }
+      if (_saveTimer) { clearTimeout(_saveTimer); _saveTimer = null; }
+    },
+
+    /** Scroll up one page (keyboard ↑ / toolbar button) */
+    prevPage() {
+      if (_curPage > 1) _scrollToPage(_curPage - 1);
+    },
+
+    /** Scroll down one page (keyboard ↓ / toolbar button) */
+    nextPage() {
+      if (_curPage < _totalPages) _scrollToPage(_curPage + 1);
+    },
+
+    /** Called by the page-number <input> on change (Enter or blur) */
+    gotoPageInput(rawValue) {
+      const n = parseInt(rawValue, 10);
+      const input = _el('pdf-page-input');
+      if (!Number.isFinite(n) || n < 1 || n > _totalPages) {
+        // Invalid entry — snap the field back to the real current page
+        if (input) input.value = _curPage;
+        return;
+      }
+      _scrollToPage(n);
+    },
+
+    async zoom(direction) {
+      // direction: +1 = zoom in, -1 = zoom out
+      const idx = ZOOM_STEPS.indexOf(
+        ZOOM_STEPS.reduce((best, z) => Math.abs(z - _zoomLevel) < Math.abs(best - _zoomLevel) ? z : best, ZOOM_STEPS[0])
+      );
+      const nextIdx = Math.max(0, Math.min(ZOOM_STEPS.length - 1, idx + direction));
+      _zoomLevel = ZOOM_STEPS[nextIdx];
+      _updateZoomLabel();
+      await _rerenderAfterZoom();
+    }
+  };
+})();
