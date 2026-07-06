@@ -18,6 +18,7 @@ import { CourseMaterials } from './courseMaterials.js';
 import { Supabase } from './supabaseClient.js';
 import { UI } from './ui.js';
 import { Modules } from './modules.js';
+import { PDFCompressor } from './pdfCompressor.js';
 
 // The one account allowed to see/use this panel. Mirrored in both
 // Edge Functions — this constant existing in three places (here +
@@ -124,11 +125,26 @@ export const AdminPanel = {
 
     const btn = $('admin-submit-btn');
     btn.disabled = true;
+
+    // Compress before upload: shrinks the file every student later
+    // downloads, at the one-time cost of a few seconds here in the
+    // admin's own browser. Falls back safely to the original file if
+    // compression fails or doesn't actually help (see pdfCompressor.js).
+    this._setStatus('loading', 'جارٍ ضغط الملف…');
+    const originalSize = this._selectedFile.size;
+    const fileToUpload = await PDFCompressor.compress(
+      this._selectedFile,
+      (msg) => this._setStatus('loading', msg)
+    );
+    const savedPct = originalSize > 0
+      ? Math.round((1 - fileToUpload.size / originalSize) * 100)
+      : 0;
+
     this._setStatus('loading', 'جارٍ الرفع… قد يستغرق ذلك بضع ثوانٍ');
 
     try {
       const form = new FormData();
-      form.append('file', this._selectedFile);
+      form.append('file', fileToUpload);
       form.append('semester', String(semester));
       form.append('module_name', moduleName);
       form.append('category', category);
@@ -142,7 +158,8 @@ export const AdminPanel = {
         return;
       }
 
-      this._setStatus('success', '✅ تم الرفع بنجاح! الدرس متاح الآن للطلاب.');
+      const savedMsg = savedPct > 0 ? ` (تم تقليل الحجم بنسبة ${savedPct}%)` : '';
+      this._setStatus('success', `✅ تم الرفع بنجاح! الدرس متاح الآن للطلاب.${savedMsg}`);
 
       // Invalidate + reload the materials cache so the new PDF is
       // immediately clickable without requiring a logout/login.
