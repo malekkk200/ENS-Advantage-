@@ -7,9 +7,17 @@
    modal for everyone else); the REAL security boundary is server
    side, in the admin-upload-material and admin-delete-material
    Edge Functions, which independently verify the caller's email
-   against the same address before touching storage or the DB. A
+   against the admin account before touching storage or the DB. A
    client-side check alone would never be sufficient — anyone could
    just call the function directly with dev tools.
+
+   NOTE: this file ships as-is to every visitor's browser (view-source
+   shows it to anyone), and this repo is public — so we deliberately
+   check `is_admin` on the user's own profile row instead of a
+   hardcoded email address. That keeps the actual admin email out of
+   both the public repo and the client bundle. `is_admin` is set once,
+   directly in the database, for the one admin account; it plays no
+   role in the real security check (that stays server-side).
 ═══════════════════════════════════════════════════════════════ */
 import { $, escHtml } from './dom.js';
 import { State } from './state.js';
@@ -20,16 +28,8 @@ import { UI } from './ui.js';
 import { Modules } from './modules.js';
 import { PDFCompressor } from './pdfCompressor.js';
 
-// The one account allowed to see/use this panel. Mirrored in both
-// Edge Functions — this constant existing in three places (here +
-// two server functions) is deliberate: the client copy only ever
-// controls whether the button/modal is *shown*, never whether an
-// action actually succeeds.
-const AUTHORIZED_ADMIN_EMAIL = 'rahalmalik2018@gmail.com';
-
 function _isAuthorizedAdmin() {
-  const email = State.currentUser?.email;
-  return !!email && email.toLowerCase() === AUTHORIZED_ADMIN_EMAIL.toLowerCase();
+  return State.currentProfile?.is_admin === true;
 }
 
 export const AdminPanel = {

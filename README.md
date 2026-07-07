@@ -157,31 +157,38 @@ scroll/swipe gesture instead of a page-at-a-time carousel. Notable behavior:
 
 ## Admin panel — who can access it, and where the real gate lives
 
-The upload/delete panel is restricted to exactly one account:
-`rahalmalik2018@gmail.com`. This is enforced in **three places**, and only
-one of them actually matters for security:
+The upload/delete panel is restricted to exactly one account (its email is
+intentionally not written down anywhere in this public repo — see below).
+This is enforced in **three places**, and only two of them actually matter
+for security:
 
 1. `js/adminPanel.js` — hides the "📤 رفع درس جديد" button and blocks
-   `AdminPanel.open()` for anyone else. **This is UI convenience only.**
-   Anyone could bypass it instantly via browser dev tools.
+   `AdminPanel.open()` for anyone else, by checking `is_admin` on the
+   signed-in user's own `user_profiles` row. **This is UI convenience
+   only.** Anyone could bypass it instantly via browser dev tools — the
+   check exists purely so the button doesn't even show up for other users.
 2. `admin-upload-material` Edge Function — re-checks the caller's email
-   (resolved server-side from their JWT, not anything sent in the request)
-   before writing to storage or the DB.
-3. `admin-delete-material` Edge Function (new) — same check, before
-   deleting a storage object + its `course_materials` row.
+   (resolved server-side from their JWT, not anything sent in the request,
+   and not the `is_admin` flag either) before writing to storage or the DB.
+3. `admin-delete-material` Edge Function — same check, before deleting a
+   storage object + its `course_materials` row.
 
-**#2 and #3 are the actual security boundary.** The email is a hardcoded
-constant (`AUTHORIZED_ADMIN_EMAIL`) in both functions rather than an
-`is_admin` database column, deliberately — a flag on a table is one
-accidental `UPDATE` away from granting access to the wrong account, which
-had in fact already happened: at the time this was implemented, the
-`is_admin` flag was set on a *different*, similarly-named account
-(`rahalmalik18@gmail.com`) instead of the intended one. That's been
-corrected in the database, but the panel no longer depends on that column
-at all — changing who's authorized now means editing the email constant in
-`js/adminPanel.js` **and both Edge Functions**, then redeploying the
-functions (`supabase functions deploy admin-upload-material` /
-`admin-delete-material`, or via the Supabase dashboard).
+**#2 and #3 are the actual security boundary**, and they check the admin's
+*email*, not `is_admin`. The email lives in an `ADMIN_EMAIL` secret in the
+Supabase dashboard (Project Settings → Edge Functions → Secrets) rather
+than in source, since this repo is public — hardcoding it here would hand
+anyone the exact address to target with phishing or credential-stuffing.
+(There's a hardcoded fallback in the deployed function for continuity if
+that secret is ever unset — but the secret should be treated as the
+source of truth, and the fallback shouldn't be relied on long-term.)
+
+`is_admin` is used **only** for the client-side UI check (#1) — it plays
+no role in #2 or #3, precisely because a boolean column is one accidental
+`UPDATE` away from granting access to the wrong account (this happened
+once before: `is_admin` was briefly set on a similarly-named typo account
+instead of the real one). Changing who's authorized means updating the
+`ADMIN_EMAIL` secret and the `is_admin` column on the correct profile row —
+no code changes or redeploys needed.
 
 **Delete**: each row in the admin panel's existing-materials list has a 🗑️
 button. It confirms once (irreversible — deletes the storage file *and* the
