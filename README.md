@@ -178,9 +178,7 @@ for security:
 Supabase dashboard (Project Settings → Edge Functions → Secrets) rather
 than in source, since this repo is public — hardcoding it here would hand
 anyone the exact address to target with phishing or credential-stuffing.
-(There's a hardcoded fallback in the deployed function for continuity if
-that secret is ever unset — but the secret should be treated as the
-source of truth, and the fallback shouldn't be relied on long-term.)
+If the secret is not set, both functions return a 500 and refuse to operate.
 
 `is_admin` is used **only** for the client-side UI check (#1) — it plays
 no role in #2 or #3, precisely because a boolean column is one accidental
