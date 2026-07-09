@@ -78,6 +78,7 @@
   <link rel="stylesheet" href="css/protection-admin.css" />
   <link rel="stylesheet" href="css/pdf-viewer.css" />
   <link rel="stylesheet" href="css/calculator.css" />
+  <link rel="stylesheet" href="css/meme-player.css" />
 
   <!-- ═══════════════════════════════════════════════════════════
        THIRD-PARTY LIBRARIES (UMD builds — attach to window.*)
@@ -257,6 +258,7 @@
               <div class="dropdown-badges" id="dd-badges"></div>
             </div>
             <button class="admin-dropdown-btn hidden" id="admin-dropdown-btn" onclick="App.AdminPanel.open()">📤 رفع درس جديد</button>
+            <button class="meme-admin-dropdown-btn hidden" id="meme-admin-dropdown-btn" onclick="App.MemeAdmin.open()">🎭 إدارة الميمات</button>
             <button class="dropdown-btn" onclick="App.Auth.logout()">⎋ Sign Out</button>
           </div>
         </div>
@@ -690,6 +692,89 @@
 <!-- PROTECTION TOAST -->
 <div id="protection-toast" class="protection-toast hidden">🚫 Print / Save is disabled for protected content.</div>
 
+
+<!-- ═══════════════════════════════════════════════════════════
+     MEME ADMIN MODAL
+     Lets the admin upload/toggle/delete memes per GPA bracket.
+     No student data ever enters this UI — it only manages meme assets.
+═══════════════════════════════════════════════════════════ -->
+<div id="meme-admin-modal" class="modal-overlay hidden" onclick="App.MemeAdmin.handleOverlayClick(event)">
+  <div class="modal-box meme-admin-modal-box" style="max-width:660px;">
+
+    <!-- Header -->
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">🎭 إدارة الميمات</div>
+        <div class="modal-subtitle">رفع وإدارة الميمات لكل فئة من فئات المعدل</div>
+      </div>
+      <button class="modal-close-btn" onclick="App.MemeAdmin.close()">✕</button>
+    </div>
+
+    <!-- Upload form -->
+    <div class="meme-upload-section">
+      <div class="meme-upload-section-title">⬆️ رفع ميم جديد</div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.65rem;margin-bottom:.65rem;">
+        <!-- Category select -->
+        <div>
+          <label class="modal-label" for="meme-upload-category">الفئة</label>
+          <select id="meme-upload-category" class="modal-input" style="cursor:pointer;">
+            <option value="cat_below_8">😱 أقل من 8.00</option>
+            <option value="cat_8_to_9_50">😬 8.00 – 9.50</option>
+            <option value="cat_9_51_to_9_99">😅 9.51 – 9.99</option>
+            <option value="cat_10_to_10_50">😌 10.00 – 10.50</option>
+            <option value="cat_10_51_to_12">😊 10.51 – 12.00</option>
+            <option value="cat_12_01_to_13_50">👍 12.01 – 13.50</option>
+            <option value="cat_13_51_to_14_99">✨ 13.51 – 14.99</option>
+            <option value="cat_15_to_15_99">🏆 15.00 – 15.99</option>
+            <option value="cat_16_plus">🎓 16.00 فأكثر</option>
+          </select>
+        </div>
+        <!-- Optional title -->
+        <div>
+          <label class="modal-label" for="meme-upload-title">عنوان (اختياري)</label>
+          <input id="meme-upload-title" class="modal-input" type="text"
+                 placeholder="اسم مضحك للميم…" maxlength="80" />
+        </div>
+      </div>
+
+      <!-- File drop area -->
+      <div class="meme-file-drop" id="meme-file-drop"
+           ondragover="event.preventDefault();this.classList.add('drag-over')"
+           ondragleave="this.classList.remove('drag-over')"
+           ondrop="event.preventDefault();this.classList.remove('drag-over');App.MemeAdmin.onFileSelected({target:{files:event.dataTransfer.files}})">
+        <input type="file" id="meme-file-input"
+               accept="video/mp4,video/webm,image/gif"
+               onchange="App.MemeAdmin.onFileSelected(event)" />
+        <div class="meme-file-drop-icon">🎬</div>
+        <div id="meme-file-drop-text" class="meme-file-drop-text">اضغط لاختيار ملف MP4 / WebM / GIF أو اسحبه هنا</div>
+        <div id="meme-file-name" class="meme-file-drop-name hidden"></div>
+      </div>
+
+      <button id="meme-upload-btn" class="meme-upload-btn" onclick="App.MemeAdmin.upload()">
+        ⬆️ رفع الميم
+      </button>
+
+      <!-- Status bar -->
+      <div id="meme-status-bar" class="meme-status-bar">
+        <span id="meme-status-spinner" class="hidden" style="display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0;"></span>
+        <span id="meme-status-text"></span>
+      </div>
+    </div>
+
+    <!-- Category tabs + meme grid -->
+    <div class="meme-cat-tabs-wrap">
+      <div id="meme-cat-tabs" class="meme-cat-tabs">
+        <!-- Rendered by MemeAdmin._renderCategoryTabs() -->
+      </div>
+    </div>
+
+    <div id="meme-admin-grid" class="meme-admin-grid">
+      <!-- Rendered by MemeAdmin._renderMemeGrid() -->
+    </div>
+
+  </div>
+</div>
 
 <!-- ═══════════════════════════════════════════════════════════
      APP LOGIC

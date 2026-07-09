@@ -38,8 +38,9 @@ export const AdminPanel = {
   /** Show the admin button only for the one authorized account */
   refreshVisibility() {
     const btn = $('admin-dropdown-btn');
-    if (!btn) return;
-    btn.classList.toggle('hidden', !_isAuthorizedAdmin());
+    if (btn) btn.classList.toggle('hidden', !_isAuthorizedAdmin());
+    const memeBtn = $('meme-admin-dropdown-btn');
+    if (memeBtn) memeBtn.classList.toggle('hidden', !_isAuthorizedAdmin());
   },
 
   open() {

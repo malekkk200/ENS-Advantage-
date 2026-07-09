@@ -4,6 +4,7 @@
 import { $ } from './dom.js';
 import { State } from './state.js';
 import { Curriculum } from './curriculum.js';
+import { MemeSystem } from './memeSystem.js';
 
 /* ─────────────────────────────────────────────────────────────
    GRADE CALCULATOR
@@ -83,7 +84,8 @@ export const Calc = {
           <div class="calc-ue-item-val" id="calc-ue-val-${sem}-1">&mdash;</div>
         </div>
       </div>
-    </div>`;
+    </div>
+    <div class="meme-box" id="meme-box-${sem}"></div>`;
 
     const bodyEl = $('calc-body');
     bodyEl.innerHTML = html;
@@ -174,10 +176,16 @@ export const Calc = {
         ];
         semMentionEl.textContent = mentions.find(([t]) => semR >= t)[1];
       }
+      // Show the meme for the completed (or partial) GPA bracket.
+      // No GPA value is sent anywhere — memeSystem.show() resolves the
+      // category client-side and plays the matching meme locally.
+      MemeSystem.show(semR, sem);
     } else {
       semValEl.textContent = '\u2014';
       semValEl.style.opacity = '1';
       semMentionEl.textContent = '';
+      // No grades entered — hide the meme box cleanly
+      MemeSystem.hide(sem);
     }
   },
 

@@ -1,0 +1,305 @@
+/* ═══════════════════════════════════════════════════════════════
+   MEME PLAYER  +  MEME ADMIN PANEL
+═══════════════════════════════════════════════════════════════ */
+
+/* ─────────────────────────────────────────────────────────────
+   MEME DISPLAY BOX  (below the GPA result card)
+───────────────────────────────────────────────────────────── */
+
+.meme-box {
+  display: none;                /* hidden by default; JS adds --visible */
+  margin-top: 1rem;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: #000;
+  position: relative;
+  /* Mirrors the result card animation so the two appear together */
+  animation: calcFadeIn .35s cubic-bezier(.16,1,.3,1) .05s both;
+  box-shadow: var(--shadow-md);
+}
+.meme-box--visible { display: block; }
+
+.meme-media {
+  display: block;
+  width: 100%;
+  max-height: 440px;
+  object-fit: contain;
+  background: #000;
+  /* Prevent the anti-copy layer from blocking meme clicks/controls */
+  pointer-events: auto;
+}
+
+.meme-caption {
+  padding: .45rem 1rem;
+  font-size: .76rem;
+  font-weight: 600;
+  color: var(--slate-400);
+  text-align: center;
+  background: #0a0a0a;
+  letter-spacing: .025em;
+}
+
+/* Shimmer skeleton shown while the catalog is still loading */
+.meme-skeleton {
+  height: 240px;
+  background: linear-gradient(
+    90deg,
+    #1e293b 25%,
+    #334155 50%,
+    #1e293b 75%
+  );
+  background-size: 200% 100%;
+  animation: memeShimmer 1.4s ease infinite;
+}
+@keyframes memeShimmer {
+  0%   { background-position:  200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   MEME ADMIN — DROPDOWN BUTTON
+───────────────────────────────────────────────────────────── */
+
+.meme-admin-dropdown-btn {
+  width: 100%;
+  text-align: left;
+  padding: .65rem 1rem;
+  border: none;
+  background: rgba(245,158,11,.08);
+  color: #b45309;
+  font-weight: 700;
+  font-size: .85rem;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  font-family: 'Inter', sans-serif;
+  transition: background .15s;
+  margin-top: .3rem;
+}
+.meme-admin-dropdown-btn:hover { background: rgba(245,158,11,.18); }
+
+/* ─────────────────────────────────────────────────────────────
+   MEME ADMIN MODAL
+───────────────────────────────────────────────────────────── */
+
+/* Re-use .modal-overlay / .modal-box / .modal-header styles from
+   the existing subscription modal; only meme-specific parts below. */
+
+/* ── Upload form section ── */
+.meme-upload-section {
+  background: var(--slate-50);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-md);
+  padding: 1rem 1.1rem 1.1rem;
+  margin-bottom: 1.1rem;
+}
+.meme-upload-section-title {
+  font-size: .72rem;
+  font-weight: 700;
+  color: var(--slate-400);
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  margin-bottom: .8rem;
+}
+
+.meme-file-drop {
+  border: 2px dashed var(--slate-200);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem 1rem;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+  position: relative;
+}
+.meme-file-drop:hover,
+.meme-file-drop.drag-over { border-color: var(--gold); background: #fffbeb; }
+.meme-file-drop input[type="file"] {
+  position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+}
+.meme-file-drop-icon { font-size: 1.6rem; margin-bottom: .3rem; }
+.meme-file-drop-text { font-size: .83rem; color: var(--slate-500); font-weight: 600; }
+.meme-file-drop-name {
+  margin-top: .45rem;
+  font-size: .78rem;
+  color: var(--gold);
+  font-weight: 700;
+  word-break: break-all;
+}
+
+.meme-upload-btn {
+  width: 100%;
+  margin-top: .75rem;
+  padding: .75rem 1rem;
+  background: var(--gold);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: .9rem;
+  font-weight: 700;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  transition: background .15s, opacity .15s;
+}
+.meme-upload-btn:hover   { background: #d97706; }
+.meme-upload-btn:disabled { opacity: .55; cursor: not-allowed; }
+
+/* ── Category tabs ── */
+.meme-cat-tabs-wrap {
+  border-bottom: 1px solid var(--slate-200);
+  margin-bottom: .9rem;
+}
+.meme-cat-tabs {
+  display: flex;
+  gap: .35rem;
+  overflow-x: auto;
+  padding-bottom: .6rem;
+  scrollbar-width: none;
+}
+.meme-cat-tabs::-webkit-scrollbar { display: none; }
+
+.meme-cat-tab {
+  flex-shrink: 0;
+  padding: .3rem .7rem;
+  border: 1.5px solid var(--slate-200);
+  border-radius: 999px;
+  font-size: .75rem;
+  font-weight: 700;
+  cursor: pointer;
+  background: white;
+  color: var(--slate-600);
+  font-family: 'Inter', sans-serif;
+  transition: all .15s;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+}
+.meme-cat-tab:hover { border-color: var(--gold); color: #b45309; }
+.meme-cat-tab--active {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: white;
+}
+
+.meme-cat-count {
+  display: inline-block;
+  background: rgba(255,255,255,.35);
+  border-radius: 999px;
+  padding: 0 .35rem;
+  font-size: .68rem;
+  min-width: 1.2rem;
+  text-align: center;
+}
+.meme-cat-tab:not(.meme-cat-tab--active) .meme-cat-count {
+  background: var(--slate-100);
+  color: var(--slate-500);
+}
+
+/* ── Meme grid ── */
+.meme-admin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: .65rem;
+  max-height: 340px;
+  overflow-y: auto;
+  padding-right: .2rem;
+}
+
+.meme-admin-item {
+  border: 1.5px solid var(--slate-200);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: white;
+  transition: opacity .2s, box-shadow .15s;
+  display: flex;
+  flex-direction: column;
+}
+.meme-admin-item:hover { box-shadow: var(--shadow-sm); }
+.meme-admin-item--inactive { opacity: .45; filter: grayscale(.5); }
+
+.meme-admin-preview-wrap {
+  aspect-ratio: 16/9;
+  background: #000;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.meme-admin-preview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.meme-admin-item-info {
+  padding: .45rem .6rem .2rem;
+  flex: 1;
+  min-width: 0;
+}
+.meme-admin-item-title {
+  font-size: .76rem;
+  font-weight: 700;
+  color: var(--slate-700);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.meme-admin-item-meta {
+  font-size: .66rem;
+  color: var(--slate-400);
+  margin-top: .12rem;
+}
+
+.meme-admin-item-actions {
+  display: flex;
+  gap: .35rem;
+  padding: .4rem .6rem .55rem;
+}
+.meme-admin-action-btn {
+  flex: 1;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: .72rem;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  padding: .3rem .3rem;
+  transition: background .15s;
+  white-space: nowrap;
+}
+.meme-admin-toggle-btn  { background: var(--slate-100); color: var(--slate-700); }
+.meme-admin-toggle-btn:hover  { background: var(--slate-200); }
+.meme-admin-delete-btn  { background: #fee2e2; color: #dc2626; }
+.meme-admin-delete-btn:hover  { background: #fecaca; }
+
+.meme-admin-empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  color: var(--slate-400);
+  font-size: .85rem;
+  padding: 2rem 1rem;
+  line-height: 1.7;
+}
+
+/* ── Status bar (reused from admin panel pattern) ── */
+.meme-status-bar {
+  margin-top: .85rem;
+  padding: .65rem .9rem;
+  border-radius: var(--radius-md);
+  font-size: .82rem;
+  font-weight: 600;
+  display: none;
+  align-items: center;
+  gap: .5rem;
+}
+.meme-status-bar.show    { display: flex; }
+.meme-status-bar.loading { background: #eff6ff; color: var(--accent); }
+.meme-status-bar.success { background: #ecfdf5; color: #059669; }
+.meme-status-bar.error   { background: #fef2f2; color: #dc2626; }
+
+/* ── Responsive ── */
+@media (max-width: 640px) {
+  .meme-admin-grid { grid-template-columns: repeat(2, 1fr); max-height: 280px; }
+  .meme-media { max-height: 300px; }
+}

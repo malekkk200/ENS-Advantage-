@@ -27,6 +27,8 @@
      community.js         — help popover + Telegram community card
      calc.js               — the grade calculator
      adminPanel.js         — no-code admin PDF upload panel
+     memeSystem.js         — GPA-bracket meme player (session-only, zero student data)
+     memeAdmin.js          — admin interface for meme catalog management
      listeners.js          — document-level keydown/mousedown handlers
 ═══════════════════════════════════════════════════════════════ */
 import { $ } from './dom.js';
@@ -41,6 +43,8 @@ import { Protection } from './protection.js';
 import { Subscription } from './subscription.js';
 import { Community } from './community.js';
 import { Calc } from './calc.js';
+import { MemeSystem } from './memeSystem.js';
+import { MemeAdmin } from './memeAdmin.js';
 
 // Registers its own document-level 'mousedown' / 'keydown' listeners
 // as a side effect of being imported — no exports needed.
@@ -50,7 +54,7 @@ import './listeners.js';
    PUBLIC SURFACE — the only thing this module puts on `window`.
    Inline onclick="App.X.y()" handlers in the HTML call into this.
 ───────────────────────────────────────────────────────────── */
-window.App = { Auth, UI, Modules, Content, PDFViewer, AdminPanel, Protection, Subscription, Community, Calc, State };
+window.App = { Auth, UI, Modules, Content, PDFViewer, AdminPanel, Protection, Subscription, Community, Calc, State, MemeAdmin };
 
 /* ─────────────────────────────────────────────────────────────
    BOOT
@@ -65,3 +69,8 @@ window.App = { Auth, UI, Modules, Content, PDFViewer, AdminPanel, Protection, Su
 })();
 
 Auth.loadState();
+
+// Kick off background catalog fetch for the meme system (non-blocking).
+// Must run after page is interactive — does not affect TTI/LCP.
+// No student data is involved; this only fetches meme metadata (URLs + categories).
+MemeSystem.init();
