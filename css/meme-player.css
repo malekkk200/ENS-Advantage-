@@ -16,6 +16,14 @@
   /* Mirrors the result card animation so the two appear together */
   animation: calcFadeIn .35s cubic-bezier(.16,1,.3,1) .05s both;
   box-shadow: var(--shadow-md);
+  /* Isolate this box on its own compositor layer + paint containment.
+     Without this, every keystroke in the calculator table (which updates
+     UE badges / averages elsewhere in the same stacking context) forces
+     the browser to repaint the GIF/video frame too, which is what made
+     the meme look laggy/stuttery while typing grades. */
+  contain: layout paint style;
+  transform: translateZ(0);
+  will-change: transform;
 }
 .meme-box--visible { display: block; }
 
@@ -27,6 +35,10 @@
   background: #000;
   /* Prevent the anti-copy layer from blocking meme clicks/controls */
   pointer-events: auto;
+  /* Own compositor layer for the media element itself, so GIF frame
+     decoding/painting is handled independently of the surrounding page. */
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .meme-caption {

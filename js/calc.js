@@ -100,7 +100,24 @@ export const Calc = {
         if (raw > 20) input.value = '20';
         else if (raw < 0) input.value = '0';
       }
-      this.recalc(parseInt(input.dataset.sem, 10));
+      // Coalesce rapid keystrokes into a single recalc per animation frame.
+      // Previously recalc() ran synchronously on every keystroke, which
+      // competes with the meme GIF/video for main-thread time and made
+      // playback look laggy while grades were being typed.
+      this._scheduleRecalc(parseInt(input.dataset.sem, 10));
+    });
+  },
+
+  _pendingSems: new Set(),
+  _recalcRAF: null,
+  _scheduleRecalc(sem) {
+    this._pendingSems.add(sem);
+    if (this._recalcRAF) return;
+    this._recalcRAF = requestAnimationFrame(() => {
+      this._recalcRAF = null;
+      const sems = [...this._pendingSems];
+      this._pendingSems.clear();
+      sems.forEach((s) => this.recalc(s));
     });
   },
 
