@@ -1,7 +1,7 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const CORS = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': 'https://ens-advantage.vercel.app',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
@@ -48,6 +48,11 @@ Deno.serve(async (req) => {
     // Brute-force protection: lock this code out after MAX_ATTEMPTS wrong guesses.
     if (data.attempts >= MAX_ATTEMPTS) {
       await sb.from('otp_codes').update({ used: true }).eq('id', data.id);
+      await sb.from('security_logs').insert({
+        event_type: 'auth_otp_locked', actor_email: emailLower, success: false,
+        ip_address: req.headers.get('cf-connecting-ip') ?? req.headers.get('x-forwarded-for'),
+        user_agent: req.headers.get('user-agent'), detail: {},
+      }).catch(() => {});
       return json({ error: 'Too many incorrect attempts. Please request a new code.' }, 429);
     }
 
@@ -58,6 +63,11 @@ Deno.serve(async (req) => {
       const update: Record<string, unknown> = { attempts };
       if (attempts >= MAX_ATTEMPTS) update.used = true; // burn the code on the final allowed miss
       await sb.from('otp_codes').update(update).eq('id', data.id);
+      await sb.from('security_logs').insert({
+        event_type: 'auth_otp_failed', actor_email: emailLower, success: false,
+        ip_address: req.headers.get('cf-connecting-ip') ?? req.headers.get('x-forwarded-for'),
+        user_agent: req.headers.get('user-agent'), detail: { attempts },
+      }).catch(() => {});
 
       return json(
         attempts >= MAX_ATTEMPTS

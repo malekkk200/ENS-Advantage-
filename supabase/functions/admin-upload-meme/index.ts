@@ -1,23 +1,9 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { corsHeaders, jsonResponse, getAdminEmail, logSecurityEvent, verifyFileSignature } from '../_shared/security.ts';
 
 const SUPABASE_URL     = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const ANON_KEY         = Deno.env.get('SUPABASE_ANON_KEY')!;
-// Prefer the ADMIN_EMAIL secret; fall back to hardcoded for continuity.
-// Set the secret in Supabase Dashboard → Project Settings → Edge Functions → Secrets.
-const ADMIN_EMAIL      = Deno.env.get('ADMIN_EMAIL') ?? 'rahalmalik2018@gmail.com';
-
-const CORS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
-
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { ...CORS, 'Content-Type': 'application/json' },
-  });
 
 const VALID_CATEGORIES = new Set([
   'cat_below_8', 'cat_8_to_9_50', 'cat_9_51_to_9_99',
@@ -43,46 +29,56 @@ function slugify(s: string): string {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
-  if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders(req) });
+  if (req.method !== 'POST') return jsonResponse(req, { error: 'Method not allowed' }, 405);
+
+  const sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
   try {
-    // 1. Auth
+    const adminEmail = getAdminEmail();
+    if (!adminEmail) {
+      console.error('[admin-upload-meme] ADMIN_EMAIL secret is not configured — denying all requests.');
+      return jsonResponse(req, { error: 'Server misconfiguration' }, 500);
+    }
+
     const jwt = (req.headers.get('Authorization') ?? '').replace('Bearer ', '').trim();
-    if (!jwt) return json({ error: 'Missing authorization token' }, 401);
+    if (!jwt) return jsonResponse(req, { error: 'Missing authorization token' }, 401);
 
     const authClient = createClient(SUPABASE_URL, ANON_KEY, {
       global: { headers: { Authorization: `Bearer ${jwt}` } },
     });
     const { data: { user }, error: userErr } = await authClient.auth.getUser();
-    if (userErr || !user) return json({ error: 'Invalid or expired session' }, 401);
+    if (userErr || !user) return jsonResponse(req, { error: 'Invalid or expired session' }, 401);
 
     const callerEmail = (user.email ?? '').toLowerCase().trim();
-    if (callerEmail !== ADMIN_EMAIL.toLowerCase())
-      return json({ error: 'Forbidden — admin access required' }, 403);
+    if (callerEmail !== adminEmail) {
+      await logSecurityEvent(sb, { event_type: 'admin_upload_meme', actor_email: user.email, success: false, detail: { reason: 'not_admin' }, req });
+      return jsonResponse(req, { error: 'Forbidden — admin access required' }, 403);
+    }
 
-    const sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
-
-    // 2. Parse form
     const form = await req.formData();
     const file     = form.get('file');
     const category = (form.get('category') ?? '').toString().trim();
     const title    = (form.get('title') ?? '').toString().trim() || null;
 
-    if (!(file instanceof File)) return json({ error: 'No file provided' }, 400);
-    if (!VALID_CATEGORIES.has(category)) return json({ error: 'Invalid category' }, 400);
+    if (!(file instanceof File)) return jsonResponse(req, { error: 'No file provided' }, 400);
+    if (!VALID_CATEGORIES.has(category)) return jsonResponse(req, { error: 'Invalid category' }, 400);
     if (!(file.type in VALID_MIME))
-      return json({ error: 'Only video/mp4, video/webm, and image/gif are accepted' }, 400);
-    if (file.size > MAX_BYTES) return json({ error: 'File exceeds 50 MB limit' }, 400);
-    if (file.size === 0) return json({ error: 'File is empty' }, 400);
+      return jsonResponse(req, { error: 'Only video/mp4, video/webm, and image/gif are accepted' }, 400);
+    if (file.size > MAX_BYTES) return jsonResponse(req, { error: 'File exceeds 50 MB limit' }, 400);
+    if (file.size === 0) return jsonResponse(req, { error: 'File is empty' }, 400);
 
-    // 3. Build storage path
+    const signatureOk = await verifyFileSignature(file, file.type);
+    if (!signatureOk) {
+      await logSecurityEvent(sb, { event_type: 'admin_upload_meme', actor_email: user.email, success: false, detail: { reason: 'signature_mismatch', claimedType: file.type }, req });
+      return jsonResponse(req, { error: 'File content does not match its declared type' }, 400);
+    }
+
     const ext      = VALID_MIME[file.type];
     const base     = slugify(title ?? '') || crypto.randomUUID().slice(0, 8);
     const uniqueId = crypto.randomUUID().slice(0, 8);
     const path     = `${category}/${base}-${uniqueId}${ext}`;
 
-    // 4. Upload
     const bytes = new Uint8Array(await file.arrayBuffer());
     const { error: uploadErr } = await sb.storage
       .from('memes')
@@ -90,13 +86,12 @@ Deno.serve(async (req) => {
 
     if (uploadErr) {
       console.error('[admin-upload-meme] storage error:', uploadErr.message);
-      return json({ error: `Storage upload failed: ${uploadErr.message}` }, 500);
+      await logSecurityEvent(sb, { event_type: 'admin_upload_meme', actor_email: user.email, success: false, detail: { reason: 'storage_error' }, req });
+      return jsonResponse(req, { error: `Storage upload failed: ${uploadErr.message}` }, 500);
     }
 
-    // 5. Public URL
     const { data: { publicUrl } } = sb.storage.from('memes').getPublicUrl(path);
 
-    // 6. Insert DB row
     const { data: row, error: dbErr } = await sb
       .from('memes')
       .insert({ category, storage_path: path, file_url: publicUrl, title, content_type: file.type, active: true })
@@ -106,13 +101,15 @@ Deno.serve(async (req) => {
     if (dbErr) {
       console.error('[admin-upload-meme] db error:', dbErr.message);
       await sb.storage.from('memes').remove([path]);
-      return json({ error: `Database insert failed: ${dbErr.message}` }, 500);
+      await logSecurityEvent(sb, { event_type: 'admin_upload_meme', actor_email: user.email, success: false, detail: { reason: 'db_error' }, req });
+      return jsonResponse(req, { error: `Database insert failed: ${dbErr.message}` }, 500);
     }
 
-    return json({ success: true, meme: row });
+    await logSecurityEvent(sb, { event_type: 'admin_upload_meme', actor_email: user.email, success: true, detail: { category, path, title }, req });
+    return jsonResponse(req, { success: true, meme: row });
 
   } catch (err) {
     console.error('[admin-upload-meme] unexpected:', err);
-    return json({ error: 'Internal server error' }, 500);
+    return jsonResponse(req, { error: 'Internal server error' }, 500);
   }
 });
