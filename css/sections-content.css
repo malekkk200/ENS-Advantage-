@@ -125,6 +125,28 @@
   }
   .mock-content video { background: #000; }
 
+  /* Multi-material picker — shown when a slot (e.g. a module's
+     summary) has more than one file registered; lets the student
+     choose one, oldest listed first. */
+  .material-picker { display: flex; flex-direction: column; gap: .6rem; }
+  .material-picker-hint { color: var(--slate-600); font-size: .88rem; margin-bottom: .2rem; }
+  .material-picker-item {
+    display: flex; align-items: center; gap: .75rem;
+    width: 100%; text-align: left; cursor: pointer;
+    background: var(--slate-50); border: 1px solid var(--slate-200);
+    border-radius: .6rem; padding: .8rem 1rem;
+    font-family: inherit; font-size: .92rem; color: var(--slate-800);
+    transition: background .15s, border-color .15s;
+  }
+  .material-picker-item:hover { background: #fff; border-color: var(--accent); }
+  .material-picker-index {
+    flex: 0 0 auto; width: 1.6rem; height: 1.6rem; border-radius: 50%;
+    background: var(--slate-200); color: var(--slate-700);
+    display: flex; align-items: center; justify-content: center;
+    font-size: .78rem; font-weight: 700;
+  }
+  .material-picker-title { flex: 1 1 auto; font-weight: 600; }
+
   /* ─── PREMIUM COMMUNITY ─── */
   .community-section {
     background: var(--navy); border-radius: 24px; padding: 3.5rem 2.5rem;

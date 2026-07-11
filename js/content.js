@@ -31,12 +31,21 @@ export const Content = {
       return;
     }
 
-    // Check for a registered PDF in course_materials
-    const material = CourseMaterials.get(State.activeSemester, modName, type);
+    // Check for registered PDFs in course_materials — a slot can now
+    // hold more than one (oldest -> newest); the array is empty when
+    // nothing is registered yet.
+    const materials = CourseMaterials.getAll(State.activeSemester, modName, type);
 
-    if (material) {
-      // Hand off to the secure canvas-based PDF viewer
-      await PDFViewer.open(mod, type, material);
+    if (materials.length === 1) {
+      // Only one on file — open it directly, same as before.
+      await PDFViewer.open(mod, type, materials[0]);
+      return;
+    }
+
+    if (materials.length > 1) {
+      // Several materials in this slot — let the student pick one,
+      // oldest first, instead of guessing which one they'll get.
+      this._showPicker(mod, type, materials);
       return;
     }
 
@@ -63,6 +72,48 @@ export const Content = {
       { USE_PROFILES: { html: true } }
     );
     $('cv-content').innerHTML = safeHtml;
+  },
+
+  // Holds the material list currently offered by the picker, so the
+  // onclick handler (which can only pass simple values) can look the
+  // chosen one back up by index.
+  _pickerMod: null,
+  _pickerType: null,
+  _pickerMaterials: null,
+
+  /** Shows a simple oldest→newest list; picking one opens the PDF viewer. */
+  _showPicker(mod, type, materials) {
+    this._pickerMod = mod;
+    this._pickerType = type;
+    this._pickerMaterials = materials;
+
+    const itemsHtml = materials.map((m, i) => `
+      <button type="button" class="material-picker-item" onclick="App.Content._openPicked(${i})">
+        <span class="material-picker-index">${i + 1}</span>
+        <span class="material-picker-title">${escHtml(m.title || mod.name)}</span>
+      </button>
+    `).join('');
+
+    this._showHtml(mod, type, `
+      <div class="material-picker">
+        <p class="material-picker-hint">هناك عدة ملفات لهذه المادة — اختر واحداً لفتحه:</p>
+        ${itemsHtml}
+      </div>
+    `);
+    // The list above is plain buttons, not premium body text — hide
+    // the watermark layer PDFViewer/HTML premium content normally gets.
+    const wmLayer = $('cv-watermark');
+    if (wmLayer) wmLayer.innerHTML = '';
+  },
+
+  /** Called by the picker's onclick handlers. */
+  async _openPicked(index) {
+    const material = this._pickerMaterials?.[index];
+    const mod  = this._pickerMod;
+    const type = this._pickerType;
+    if (!material || !mod) return;
+    this.close();
+    await PDFViewer.open(mod, type, material);
   },
 
   _summaryPlaceholder(mod) {

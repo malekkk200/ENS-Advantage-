@@ -136,24 +136,30 @@ Deno.serve(async (req) => {
       return jsonResponse(req, { error: "Could not derive a valid path from module_name" }, 400);
     }
 
+    // Each upload gets its own file and its own row now — multiple
+    // materials can coexist in the same (semester, module, category)
+    // slot, shown oldest -> newest, instead of each new upload
+    // silently overwriting the last one.
+    const uniqueId = crypto.randomUUID().slice(0, 8);
     let storagePath: string;
     if (category === "summary") {
-      storagePath = `summaries/s${semester}/${moduleSlug}.pdf`;
+      storagePath = `summaries/s${semester}/${moduleSlug}-${uniqueId}.pdf`;
     } else {
-      const fileName = category === "full_lesson" ? "lesson.pdf" : "guide.pdf";
-      storagePath = `premium/s${semester}/${moduleSlug}/${fileName}`;
+      const fileName = category === "full_lesson" ? "lesson" : "guide";
+      storagePath = `premium/s${semester}/${moduleSlug}/${fileName}-${uniqueId}.pdf`;
     }
 
     const title = titleInput || `${CATEGORY_LABELS[category]} — ${moduleName}`;
 
-    // ── 5. Upload to the private bucket (overwrite if it exists) ──
+    // ── 5. Upload to the private bucket — never overwrite; every
+    //       upload gets a fresh, unique path ──
     const fileBytes = new Uint8Array(await file.arrayBuffer());
 
     const { error: uploadErr } = await adminClient.storage
       .from("course-materials")
       .upload(storagePath, fileBytes, {
         contentType: "application/pdf",
-        upsert: true,
+        upsert: false,
       });
 
     if (uploadErr) {
@@ -162,18 +168,27 @@ Deno.serve(async (req) => {
       return jsonResponse(req, { error: `Storage upload failed: ${uploadErr.message}` }, 500);
     }
 
-    // ── 6. Upsert the metadata row ─────────────────────
+    // ── 6. Insert (append) the metadata row — next sort_order in
+    //       this slot = current count, so the new material lands at
+    //       the end (oldest -> newest ordering) ──
+    const { count: existingCount } = await adminClient
+      .from("course_materials")
+      .select("id", { count: "exact", head: true })
+      .eq("semester", semester)
+      .eq("module_name", moduleName)
+      .eq("category", category);
+
     const { data: row, error: dbErr } = await adminClient
       .from("course_materials")
-      .upsert(
-        { semester, module_name: moduleName, category, title, storage_path: storagePath },
-        { onConflict: "semester,module_name,category" }
-      )
+      .insert({
+        semester, module_name: moduleName, category, title,
+        storage_path: storagePath, sort_order: existingCount ?? 0,
+      })
       .select()
       .single();
 
     if (dbErr) {
-      console.error("[admin-upload-material] db upsert error:", dbErr.message);
+      console.error("[admin-upload-material] db insert error:", dbErr.message);
       await adminClient.storage.from("course-materials").remove([storagePath]);
       await logSecurityEvent(adminClient, { event_type: "admin_upload_material", actor_email: userData.user.email, success: false, detail: { reason: "db_error" }, req });
       return jsonResponse(req, { error: `Database write failed: ${dbErr.message}` }, 500);

@@ -362,7 +362,7 @@ export const PDFViewer = (() => {
      * Main entry point.
      * @param {object} mod       Module object { name, … }
      * @param {string} type      'summary' | 'fullLesson' | 'guide'
-     * @param {object} material  { id, title, storagePath } from CourseMaterials.get()
+     * @param {object} material  { id, title, storagePath } — one entry from CourseMaterials.getAll()
      */
     async open(mod, type, material) {
       // Set type label in toolbar

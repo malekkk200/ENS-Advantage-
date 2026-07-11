@@ -189,10 +189,14 @@ export const AdminPanel = {
 
     const labels = { summary: 'ملخص', full_lesson: 'درس كامل', guide: 'دليل' };
     const rows = [];
-    for (const [key, val] of CourseMaterials._cache.entries()) {
+    for (const [key, materials] of CourseMaterials._cache.entries()) {
       const [sem, mod, cat] = key.split(':');
       if (parseInt(sem, 10) !== semester) continue;
-      rows.push({ id: val.id, mod, cat, title: val.title });
+      // A slot can hold several files now (oldest -> newest); list
+      // every one so nothing silently disappears from view.
+      materials.forEach((val, i) => {
+        rows.push({ id: val.id, mod, cat, title: val.title, order: i + 1, count: materials.length });
+      });
     }
 
     if (!rows.length) {
@@ -204,7 +208,7 @@ export const AdminPanel = {
       '<div style="font-size:.75rem;font-weight:700;color:var(--slate-400);margin-bottom:.5rem;text-transform:uppercase;letter-spacing:.04em;">الملفات المسجَّلة حالياً</div>' +
       rows.map(r => `
         <div class="admin-existing-item" id="admin-item-${escHtml(r.id)}">
-          <span class="name">${escHtml(r.title)}</span>
+          <span class="name">${escHtml(r.title)}${r.count > 1 ? ` <span style="color:var(--slate-400);font-weight:400;">(${r.order}/${r.count})</span>` : ''}</span>
           <span class="badge">${escHtml(labels[r.cat] || r.cat)}</span>
           <button class="admin-delete-btn" title="حذف هذا الملف نهائياً"
                   onclick="App.AdminPanel.deleteMaterial('${escHtml(r.id)}', '${escHtml(r.title).replace(/'/g, "\\'")}')">🗑️</button>
