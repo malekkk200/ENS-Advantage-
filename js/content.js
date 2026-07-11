@@ -5,7 +5,7 @@ import { sb } from './supabaseClient.js';
 import { Curriculum } from './curriculum.js';
 import { CourseMaterials } from './courseMaterials.js';
 import { State } from './state.js';
-import { $, escHtml } from './dom.js';
+import { $, escHtml, lockBodyScroll, unlockBodyScroll } from './dom.js';
 import { PDFViewer } from './pdfViewer.js';
 import { Subscription } from './subscription.js';
 
@@ -162,10 +162,12 @@ export const Content = {
 
     if (type !== 'summary') State.contentViewerActive = true;
     $('content-overlay').classList.remove('hidden');
+    lockBodyScroll();
   },
 
   close() {
     $('content-overlay').classList.add('hidden');
+    unlockBodyScroll();
     State.contentViewerActive = false;
   }
 };

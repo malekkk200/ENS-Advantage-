@@ -131,6 +131,9 @@
     -webkit-user-select: none; user-select: none;
     /* Disable system drag */
     -webkit-user-drag: none;
+    /* Stop scrolling from "chaining" into the page behind once this
+       zone hits its top/bottom bound (desktop trackpad/wheel). */
+    overscroll-behavior: contain;
   }
   .pdf-canvas-zone::-webkit-scrollbar { width: 5px; }
   .pdf-canvas-zone::-webkit-scrollbar-track { background: #070f1f; }

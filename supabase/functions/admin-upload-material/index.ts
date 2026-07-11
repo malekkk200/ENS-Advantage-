@@ -171,6 +171,32 @@ Deno.serve(async (req) => {
     // ── 6. Insert (append) the metadata row — next sort_order in
     //       this slot = current count, so the new material lands at
     //       the end (oldest -> newest ordering) ──
+    // Only 'summary' and 'full_lesson' accumulate multiple files per
+    // slot (oldest -> newest, picked from a list). 'guide' stays
+    // single-file per module/semester: a new guide upload replaces
+    // whatever was there before, same as the original behaviour.
+    const isMultiSlot = category === "summary" || category === "full_lesson";
+
+    if (!isMultiSlot) {
+      const { data: prior } = await adminClient
+        .from("course_materials")
+        .select("id, storage_path")
+        .eq("semester", semester)
+        .eq("module_name", moduleName)
+        .eq("category", category);
+
+      if (prior && prior.length > 0) {
+        const priorPaths = prior.map((p) => p.storage_path).filter(Boolean);
+        if (priorPaths.length > 0) {
+          await adminClient.storage.from("course-materials").remove(priorPaths);
+        }
+        await adminClient
+          .from("course_materials")
+          .delete()
+          .in("id", prior.map((p) => p.id));
+      }
+    }
+
     const { count: existingCount } = await adminClient
       .from("course_materials")
       .select("id", { count: "exact", head: true })

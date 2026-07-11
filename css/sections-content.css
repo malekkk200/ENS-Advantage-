@@ -92,6 +92,7 @@
     flex: 1; overflow-y: auto; padding: 2rem 1.75rem;
     position: relative;
     user-select: none; -webkit-user-select: none; -moz-user-select: none;
+    overscroll-behavior: contain;
   }
   .viewer-body.blurred { filter: blur(6px); }
   .watermark-layer {

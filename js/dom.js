@@ -22,8 +22,48 @@ export function escHtml(str) {
 }
 
 /* ─────────────────────────────────────────────────────────────
-   SCROLL REVEAL
+   SCROLL LOCK
+   ───────────────────────────────────────────────────────────
+   Used whenever a full-screen overlay (PDF viewer, content
+   viewer/picker) opens, so the page behind it can't be scrolled
+   at the same time.
+
+   `document.body.style.overflow = 'hidden'` alone is NOT enough:
+   iOS Safari still lets touch-scroll gestures move the page
+   underneath a `position: fixed` overlay even with overflow
+   hidden on body — a well-known iOS quirk. The reliable fix is to
+   pin the body itself with `position: fixed` (restoring the exact
+   scroll offset on unlock), which works everywhere.
 ───────────────────────────────────────────────────────────── */
+let _lockedScrollY = 0;
+let _lockCount = 0; // supports nested lock/unlock calls safely
+
+export function lockBodyScroll() {
+  _lockCount++;
+  if (_lockCount > 1) return; // already locked by an outer caller
+  _lockedScrollY = window.scrollY || window.pageYOffset || 0;
+  document.body.style.position = 'fixed';
+  document.body.style.top = `-${_lockedScrollY}px`;
+  document.body.style.left = '0';
+  document.body.style.right = '0';
+  document.body.style.width = '100%';
+  document.body.style.overflow = 'hidden';
+}
+
+export function unlockBodyScroll() {
+  if (_lockCount === 0) return;
+  _lockCount--;
+  if (_lockCount > 0) return; // still locked by another caller
+  document.body.style.position = '';
+  document.body.style.top = '';
+  document.body.style.left = '';
+  document.body.style.right = '';
+  document.body.style.width = '';
+  document.body.style.overflow = '';
+  window.scrollTo(0, _lockedScrollY);
+}
+
+
 export function initScrollReveal() {
   if (!State.scrollObserver) {
     State.scrollObserver = new IntersectionObserver((entries) => {
