@@ -235,9 +235,26 @@ export const PDFViewer = (() => {
     const firstPage = await _pdfDoc.getPage(1);
     _baseScale = _fitWidthScale(firstPage.getViewport({ scale: 1 }));
 
+    // Fetch every remaining page's metadata (dimensions etc.) in
+    // parallel instead of one-at-a-time. getPage() is an async
+    // lookup into the document that's already streaming in — awaiting
+    // it sequentially for every page (20-50+ for a full lesson) was
+    // the main reason opening a lesson felt slow, since the wait time
+    // stacked up per page instead of overlapping. This only changes
+    // how fast the page scaffold is built; actual pixel rendering is
+    // still lazy via the IntersectionObserver below, unchanged.
+    // (Page 1 is reused from the fetch above instead of being
+    // requested a second time.)
+    const remainingNums = [];
+    for (let n = 2; n <= _totalPages; n++) remainingNums.push(n);
+    const remainingPages = await Promise.all(
+      remainingNums.map(n => _pdfDoc.getPage(n))
+    );
+    const allPages = [firstPage, ...remainingPages]; // index 0 = page 1
+
+    const scale = _baseScale * _zoomLevel;
     for (let n = 1; n <= _totalPages; n++) {
-      const page     = await _pdfDoc.getPage(n);
-      const scale    = _baseScale * _zoomLevel;
+      const page     = allPages[n - 1];
       const viewport = page.getViewport({ scale });
 
       const wrapper = document.createElement('div');
