@@ -48,6 +48,24 @@ function slugify(input: string): string {
     .slice(0, 80);
 }
 
+// slugify() only keeps Latin letters/digits, so a module name written
+// entirely in another script (Arabic, etc.) collapses to a slug with
+// no actual content — e.g. "-" once the whitespace-collapsing step
+// runs. That string is non-empty so it silently passed the old empty
+// check, and every non-Latin module name ended up sharing that same
+// literal "-" storage folder. This derives a short, stable, distinct
+// slug from the real module name instead, so non-Latin names get
+// their own folder exactly like Latin names do — same behavior,
+// just not human-readable in the path.
+async function fallbackSlug(moduleName: string): Promise<string> {
+  const bytes = new TextEncoder().encode(moduleName);
+  const digestBuf = await crypto.subtle.digest("SHA-256", bytes);
+  const hex = Array.from(new Uint8Array(digestBuf))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  return `mod-${hex.slice(0, 16)}`;
+}
+
 const CATEGORY_LABELS: Record<string, string> = {
   summary:     "Summary",
   full_lesson: "Full Lesson",
@@ -131,9 +149,13 @@ Deno.serve(async (req) => {
     }
 
     // ── 4. Build the canonical storage path ──────────────────
-    const moduleSlug = slugify(moduleName);
-    if (!moduleSlug) {
-      return jsonResponse(req, { error: "Could not derive a valid path from module_name" }, 400);
+    let moduleSlug = slugify(moduleName);
+    if (!/[a-z0-9]/.test(moduleSlug)) {
+      // No usable Latin content — e.g. an Arabic-only module name.
+      // Fall back to a stable per-module hash so it still gets its
+      // own distinct folder instead of silently sharing "-" with
+      // every other module in the same situation.
+      moduleSlug = await fallbackSlug(moduleName);
     }
 
     // Each upload gets its own file and its own row now — multiple
