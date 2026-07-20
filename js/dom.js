@@ -60,7 +60,15 @@ export function unlockBodyScroll() {
   document.body.style.right = '';
   document.body.style.width = '';
   document.body.style.overflow = '';
-  window.scrollTo(0, _lockedScrollY);
+  // Explicit 'instant' — not the 2-argument form, and not behavior:'auto'.
+  // base.css sets `scroll-behavior: smooth` globally, and per spec
+  // 'auto' means "follow the CSS scroll-behavior", so it would still
+  // animate. The user never actually moved (position:fixed kept the
+  // same content on screen the whole time this was locked), so an
+  // animated scroll here just looks like the page glides back down to
+  // a spot it was already showing — 'instant' bypasses that and snaps
+  // back with no visible motion, matching what the user expects.
+  window.scrollTo({ top: _lockedScrollY, left: 0, behavior: 'instant' });
 }
 
 

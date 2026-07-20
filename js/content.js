@@ -87,19 +87,43 @@ export const Content = {
     this._pickerType = type;
     this._pickerMaterials = materials;
 
-    const itemsHtml = materials.map((m, i) => `
-      <button type="button" class="material-picker-item" onclick="App.Content._openPicked(${i})">
-        <span class="material-picker-index">${i + 1}</span>
-        <span class="material-picker-title">${escHtml(m.title || mod.name)}</span>
-      </button>
-    `).join('');
-
+    // Render only the static hint through the normal (sanitized) HTML
+    // path — the actual button list is built as real DOM nodes below,
+    // NOT as an HTML string. This matters: _showHtml() runs its content
+    // through DOMPurify.sanitize(), which strips inline onclick="..."
+    // attributes by design (that's what stops arbitrary script
+    // injection) — so a button list assembled as an HTML string with
+    // onclick attributes renders fine but silently loses its click
+    // handlers. Building the buttons with createElement +
+    // addEventListener sidesteps that entirely.
     this._showHtml(mod, type, `
-      <div class="material-picker">
+      <div class="material-picker" id="material-picker-list">
         <p class="material-picker-hint">هناك عدة ملفات لهذه المادة — اختر واحداً لفتحه:</p>
-        ${itemsHtml}
       </div>
     `);
+
+    const list = $('material-picker-list');
+    if (list) {
+      materials.forEach((m, i) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'material-picker-item';
+
+        const index = document.createElement('span');
+        index.className = 'material-picker-index';
+        index.textContent = String(i + 1);
+
+        const title = document.createElement('span');
+        title.className = 'material-picker-title';
+        title.textContent = m.title || mod.name; // textContent — never parsed as HTML
+
+        btn.appendChild(index);
+        btn.appendChild(title);
+        btn.addEventListener('click', () => this._openPicked(i));
+        list.appendChild(btn);
+      });
+    }
+
     // The list above is plain buttons, not premium body text — hide
     // the watermark layer PDFViewer/HTML premium content normally gets.
     const wmLayer = $('cv-watermark');
