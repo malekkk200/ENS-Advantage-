@@ -9,6 +9,12 @@
   #main-app input, #main-app textarea { -webkit-user-select: text; user-select: text; }
   /* Prevent image drag */
   #main-app img { -webkit-user-drag: none; pointer-events: none; }
+  /* iOS Safari: long-pressing an image or text shows a native "Save
+     Image" / "Copy" callout menu that user-select:none does NOT
+     suppress — it's a separate WebKit control. This closes that gap. */
+  #main-app, #main-app img, #main-app canvas {
+    -webkit-touch-callout: none;
+  }
   /* Print override — hides premium content even if CSS print is forced */
   @media print {
     #main-app { visibility: hidden !important; }

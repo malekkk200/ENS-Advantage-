@@ -1,0 +1,6 @@
+# The Android/Capacitor app source lives in this repo alongside the
+# website for convenience (single source of truth, one PR history),
+# but it's a separate build artifact — an Android Studio project, not
+# part of the deployed site — so it's excluded from what Vercel
+# actually serves at ens-advantage.vercel.app.
+mobile-app/

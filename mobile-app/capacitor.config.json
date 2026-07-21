@@ -1,0 +1,13 @@
+{
+  "appId": "com.ensadvantage.app",
+  "appName": "ENS Advantage",
+  "webDir": "www",
+  "server": {
+    "url": "https://ens-advantage.vercel.app",
+    "cleartext": false,
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": false
+  }
+}
