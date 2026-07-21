@@ -21,6 +21,25 @@
   <meta name="robots" content="index, follow" />
   <link rel="canonical" href="https://ens-advantage.vercel.app/" />
 
+  <!-- ═══════════════════════════════════════════════════════════
+       PWA — installable app metadata
+       manifest.json + icons let ENS Advantage be installed to a
+       phone/desktop home screen as a standalone app (Add to Home
+       Screen / install prompt). sw.js (registered at the bottom of
+       this file) caches the app shell for instant repeat loads and
+       basic offline support.
+  ═══════════════════════════════════════════════════════════ -->
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#0f1f3d" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/icons/icon-32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/assets/icons/icon-16.png" />
+  <link rel="shortcut icon" href="/favicon.ico" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/icons/icon-180.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="ENS Advantage" />
+  <meta name="mobile-web-app-capable" content="yes" />
+
   <!-- Open Graph (Facebook, WhatsApp, Telegram link previews — the
        channels these students actually share links through) -->
   <meta property="og:type" content="website" />
@@ -782,5 +801,24 @@
      (js/*.js). See js/main.js for the full module map.
 ═══════════════════════════════════════════════════════════ -->
 <script type="module" src="js/main.js"></script>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     PWA — SERVICE WORKER REGISTRATION
+     Plain script (not a module) so it registers unconditionally,
+     even if the app modules above throw. Failing quietly if the
+     browser doesn't support service workers (older browsers) is
+     intentional — the site works fine without it, this is purely
+     an enhancement.
+═══════════════════════════════════════════════════════════════ -->
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').catch((err) => {
+        console.warn('[PWA] service worker registration failed:', err);
+      });
+    });
+  }
+</script>
+
 </body>
 </html>
