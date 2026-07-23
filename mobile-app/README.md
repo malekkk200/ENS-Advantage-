@@ -1,74 +1,113 @@
-# ENS Advantage — Android App
+# ENS Advantage — Mobile Apps (Android + iOS)
 
-A native Android wrapper around the live website (Capacitor). It is
-**not** a separate copy of the app — `capacitor.config.json` points
-the WebView straight at `https://ens-advantage.vercel.app`, so
-whatever is live on the website is instantly what's in the app. Same
-Supabase backend, same login, same uploads, same everything. There is
-nothing to "keep in sync" — there's only one app, wrapped two ways.
+Native wrappers around the live website (Capacitor). Neither is a
+separate copy of the app — `capacitor.config.json` points the WebView
+straight at `https://ens-advantage.vercel.app`, so whatever is live on
+the website is instantly what's in both apps. Same Supabase backend,
+same login, same uploads, same everything. There is nothing to "keep
+in sync" — there's only one app, wrapped three ways (web, Android, iOS).
 
-## What this adds beyond the PWA
+## What these add beyond the PWA
 
-The PWA (installable from the website itself) can't block screenshots
-on any platform — browsers give web pages no such API. This native
-Android build can, using a real OS-level flag:
+The PWA (installable from the website itself) can't block or detect
+screenshots on any platform — browsers give web pages no such API.
+These native builds can, but very differently on each platform:
 
-- **`MainActivity.java`** sets `WindowManager.LayoutParams.FLAG_SECURE`.
-  This is enforced by Android itself, not app-level trickery:
-  - Screenshots of the app come back black / fail
-  - Screen recording and screen-sharing show black instead of content
-  - The app's card in the Recent Apps switcher is hidden (blank instead
-    of a content thumbnail)
+### Android — real blocking
+`MainActivity.java` sets `WindowManager.LayoutParams.FLAG_SECURE`.
+This is enforced by Android itself, not app-level trickery:
+- Screenshots come back black / fail
+- Screen recording and screen-sharing show black instead of content
+- The app's card in the Recent Apps switcher is hidden (blank instead
+  of a content thumbnail)
 
-**This has no iOS equivalent.** Apple provides no API to block
-screenshots — only to detect one after the fact and react (e.g. blur
-the screen briefly). If you build an iOS version later via Capacitor,
-budget for "detect and blur," not "block."
+### iOS — recording can be blacked out; a single screenshot cannot be blocked, only reported
+Apple gives no API to prevent a screenshot — none exists, for any app,
+on any iOS version. `SecureViewController.swift` does the best
+available two things:
+- **Screen recording**: `UIScreen.isCaptured` fires the instant
+  recording/AirPlay-mirroring starts. We cover the WebView with solid
+  black for as long as it's true. This part is real and works like
+  the Android case.
+- **A single screenshot**: `userDidTakeScreenshotNotification` fires
+  only *after* iOS has already saved the image to Photos — there is no
+  way to intercept it earlier, by anyone, ever. We can't blank the
+  image. What we do instead: immediately call back into the web app
+  (`window.__ensReportSecurityEvent`, wired to `js/nativeBridge.js` →
+  the `log-screenshot-event` Edge Function → the `security_logs`
+  table), tagging the event to that student's account, and show a
+  brief on-screen notice. This doesn't prevent anything — it's the
+  record that makes manual account review/termination possible after
+  a leak, which is the actual enforcement lever for a subscription
+  platform (see the conversation this was designed around: screenshots
+  can never be fully blocked on any platform by physically
+  photographing the screen with a second device — the realistic goal
+  is raising the cost of leaking, not making it impossible).
 
 ## Why I couldn't finish this for you end-to-end
 
-Building and signing the actual installable `.apk`/`.aab` requires the
-Android SDK, Gradle, and network access to Google's Maven repository —
-none of which are available in the sandboxed environment I'm running
-in (it only allows npm/GitHub/PyPI domains). Everything up to that
-point — the Capacitor project, `FLAG_SECURE`, all launcher icons and
-splash screens generated from your logo — is done and committed. The
-build step needs to happen on your machine or in CI.
+Building and signing the actual installable Android `.apk`/`.aab` or
+iOS `.ipa` requires platform SDKs (Android Studio/Gradle, or Xcode on
+an actual Mac) and network access to Google's/Apple's servers — none
+of which are available in the sandboxed environment I'm running in (it
+only allows npm/GitHub/PyPI domains, and iOS builds specifically are
+an Apple restriction: Xcode only runs on macOS, full stop, regardless
+of environment). Everything up to that point is done and committed:
+the Capacitor projects for both platforms, `FLAG_SECURE`, the
+screenshot/recording Swift code, all launcher icons and splash screens
+generated from your logo. The build step needs to happen on your
+machine (Android: any OS with Android Studio; iOS: a Mac with Xcode).
 
 ## Building it yourself
 
+### Android
 1. Install [Android Studio](https://developer.android.com/studio) (includes the SDK).
-2. Clone the repo, then:
-   ```bash
+2. ```bash
    cd mobile-app
    npm install
    npx cap sync android
    npx cap open android
    ```
-3. Android Studio opens the `android/` project. To test on a device/emulator: **Run ▶**.
+3. Android Studio opens the `android/` project. To test: **Run ▶**.
 4. To produce a real installable build: **Build → Generate Signed Bundle / APK**.
-   - Choose **Android App Bundle (.aab)** if you're publishing to Google Play (required format).
-   - Choose **APK** if you just want to sideload it directly onto a phone for now.
-   - You'll need to create a signing keystore the first time — Android Studio walks you through it. **Back that keystore file up somewhere safe outside git** (a password manager or private cloud folder). If you lose it, you can never publish an update to the same Play Store listing again.
+   - **Android App Bundle (.aab)** for Google Play (required format).
+   - **APK** to sideload directly for now.
+   - Back up the signing keystore somewhere safe outside git — losing it means you can never publish an update to the same Play listing again.
 
-## Publishing to Google Play
+### iOS
+1. You need a Mac with [Xcode](https://apps.apple.com/app/xcode/id497799835) installed, and a paid [Apple Developer Program](https://developer.apple.com/programs/) membership ($99/year — required even for personal device testing beyond 7 days).
+2. ```bash
+   cd mobile-app
+   npm install
+   npx cap sync ios
+   npx cap open ios
+   ```
+3. Xcode opens `ios/App/App.xcworkspace`. First build: set your Team under **Signing & Capabilities**.
+4. To test on a real iPhone: plug it in, select it as the run target, **Run ▶**. (Simulators can't test screenshot/recording detection meaningfully — use a real device.)
+5. To publish: **Product → Archive**, then **Distribute App** through Xcode Organizer to TestFlight or the App Store.
 
-- One-time $25 registration: https://play.google.com/console/signup
-- Upload the signed `.aab`, fill in the store listing (your `assets/logo.jpg` already doubles as a fine icon/feature-graphic starting point), and submit for review.
+## Publishing
 
-## Regenerating icons/splash screens
+- **Google Play**: one-time $25 registration at https://play.google.com/console/signup, upload the signed `.aab`.
+- **App Store**: $99/year Apple Developer membership, submit the archive via App Store Connect. Review typically takes 1–3 days.
 
-If the logo changes, regenerate everything from the new file:
+## Regenerating icons/splash screens (both platforms)
+
+If the logo changes:
 ```bash
 cp /path/to/new-logo.png assets/icon.png
-npx capacitor-assets generate --android \
+npx capacitor-assets generate \
   --iconBackgroundColor '#ffffff' --iconBackgroundColorDark '#0f1f3d' \
   --splashBackgroundColor '#ffffff' --splashBackgroundColorDark '#0f1f3d'
 ```
+(omit `--android`/`--ios` to regenerate both at once)
 
 ## Files that matter here
 
-- `capacitor.config.json` — points the app at the live site
+- `capacitor.config.json` — points both apps at the live site
 - `android/app/src/main/java/com/ensadvantage/app/MainActivity.java` — `FLAG_SECURE`
-- `android/app/src/main/res/mipmap-*/` — launcher icons (generated from your logo)
-- `android/app/src/main/res/drawable*/splash.png` — splash screens (generated from your logo)
+- `ios/App/App/SecureViewController.swift` — recording black-out + screenshot reporting
+- `ios/App/App/Base.lproj/Main.storyboard` — wired to use `SecureViewController`
+- `android/app/src/main/res/mipmap-*/`, `ios/App/App/Assets.xcassets/` — icons/splash (generated from your logo)
+- Website-side pieces this depends on: `js/nativeBridge.js` (receives the native call) and `supabase/functions/log-screenshot-event/` (logs it) — both already deployed with the website, not something you need to do anything about here.
+

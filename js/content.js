@@ -8,6 +8,7 @@ import { State } from './state.js';
 import { $, escHtml, lockBodyScroll, unlockBodyScroll } from './dom.js';
 import { PDFViewer } from './pdfViewer.js';
 import { Subscription } from './subscription.js';
+import { paintWatermark } from './watermark.js';
 
 /* ─────────────────────────────────────────────────────────────
    CONTENT VIEWER  (HTML fallback — used only when no PDF exists)
@@ -169,22 +170,12 @@ export const Content = {
 
     // Watermark for premium HTML content
     const wmLayer = $('cv-watermark');
-    wmLayer.innerHTML = '';
-    if (type !== 'summary' && State.currentUser && State.currentProfile) {
-      const text = `${State.currentProfile.first_name} ${State.currentProfile.last_name} – ${State.currentUser.email}`.trim();
-      for (let row = 0; row < 8; row++) {
-        for (let col = 0; col < 3; col++) {
-          const el = document.createElement('div');
-          el.className = 'watermark-text';
-          el.style.top  = (row * 130 + 40) + 'px';
-          el.style.left = (col * 280 - 60)  + 'px';
-          el.textContent = text;
-          wmLayer.appendChild(el);
-        }
-      }
+    if (type !== 'summary') {
+      paintWatermark(wmLayer, { className: 'watermark-text' });
+      State.contentViewerActive = true;
+    } else {
+      wmLayer.innerHTML = '';
     }
-
-    if (type !== 'summary') State.contentViewerActive = true;
     $('content-overlay').classList.remove('hidden');
     lockBodyScroll();
   },

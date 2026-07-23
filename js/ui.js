@@ -7,6 +7,7 @@ import { Curriculum } from './curriculum.js';
 import { CourseMaterials } from './courseMaterials.js';
 import { Protection } from './protection.js';
 import { Realtime } from './realtime.js';
+import { Sessions } from './sessions.js';
 import { Modules } from './modules.js';
 import { Community } from './community.js';
 import { AdminPanel } from './adminPanel.js';
@@ -25,6 +26,7 @@ export const UI = {
     $('main-app').classList.add('hidden');
     Protection.deactivate();
     Realtime.teardown();
+    Sessions.teardown();
   },
 
   showAuthOtp() {
@@ -56,6 +58,7 @@ export const UI = {
     Community.updateNote();
     Protection.activate();
     Realtime.setup();
+    Sessions.claim();
     Calc.init();
   },
 

@@ -6,6 +6,7 @@ import { State } from './state.js';
 import { $ } from './dom.js';
 import { CourseMaterials } from './courseMaterials.js';
 import { Realtime } from './realtime.js';
+import { Sessions } from './sessions.js';
 import { UI } from './ui.js';
 import { Content } from './content.js';
 import { PDFViewer } from './pdfViewer.js';
@@ -45,6 +46,7 @@ export const Auth = {
         State.currentUser = null;
         State.currentProfile = null;
         Realtime.teardown();
+        Sessions.teardown();
         render();
       }
     });
@@ -333,6 +335,7 @@ export const Auth = {
 
   async logout() {
     Realtime.teardown();
+    await Sessions.releaseOnLogout();
     // Close any open viewers before signing out
     PDFViewer.close();
     Content.close();

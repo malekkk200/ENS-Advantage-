@@ -16,6 +16,7 @@ export const State = {
   currentUser: null,
   currentProfile: null,
   realtimeChannel: null,
+  sessionChannel: null,
   // auth screen
   currentAuthMode: 'login',
   // main app

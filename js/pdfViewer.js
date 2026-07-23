@@ -17,6 +17,7 @@
 import { sb } from './supabaseClient.js';
 import { State } from './state.js';
 import { lockBodyScroll, unlockBodyScroll } from './dom.js';
+import { paintWatermark } from './watermark.js';
 
 // Initialise the PDF.js worker source immediately — this avoids a
 // small delay on first open because the worker script starts loading
@@ -161,25 +162,7 @@ export const PDFViewer = (() => {
 
   /** Build the tiled user-identity watermark inside one page's layer */
   function _buildWatermarkInto(layer) {
-    layer.innerHTML = '';
-    if (!State.currentUser || !State.currentProfile) return;
-
-    const name  = `${State.currentProfile.first_name || ''} ${State.currentProfile.last_name || ''}`.trim();
-    const email = State.currentUser.email || '';
-    const text  = name ? `${name}  ·  ${email}` : email;
-
-    // Tile across the layer: 7 rows × 3 columns, offset every other row
-    const rows = 7, cols = 3;
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const el = document.createElement('div');
-        el.className = 'pdf-wm-text';
-        el.textContent = text;
-        el.style.top  = (r * 140 + (c % 2 === 0 ? 30 : 100)) + 'px';
-        el.style.left = (c * 200 - 40) + 'px';
-        layer.appendChild(el);
-      }
-    }
+    paintWatermark(layer, { className: 'pdf-wm-text' });
   }
 
   /** Actually rasterize one page's canvas — called lazily by the IntersectionObserver */

@@ -49,6 +49,7 @@ import { MemeAdmin } from './memeAdmin.js';
 // Registers its own document-level 'mousedown' / 'keydown' listeners
 // as a side effect of being imported — no exports needed.
 import './listeners.js';
+import './nativeBridge.js';
 
 /* ─────────────────────────────────────────────────────────────
    PUBLIC SURFACE — the only thing this module puts on `window`.
