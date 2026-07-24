@@ -10,6 +10,14 @@ import { MemeSystem } from './memeSystem.js';
    GRADE CALCULATOR
 ───────────────────────────────────────────────────────────── */
 export const Calc = {
+  toggleRules() {
+    const panel = $('calc-rules-panel');
+    const chevron = $('calc-rules-chevron');
+    if (!panel) return;
+    const nowHidden = panel.classList.toggle('hidden');
+    if (chevron) chevron.textContent = nowHidden ? '▾' : '▴';
+  },
+
   switchSem(sem) {
     State.calcActiveSem = sem;
     $('calc-tab-1').classList.toggle('active', sem === 1);
@@ -57,6 +65,7 @@ export const Calc = {
               </td>
               <td style="text-align:center;">
                 <span class="calc-avg-cell avg-empty" id="calc-avg-${uid}">&mdash;</span>
+                <div class="calc-status-tag" id="calc-status-${uid}"></div>
               </td>
             </tr>`;
       });
@@ -64,6 +73,7 @@ export const Calc = {
       html += `
           </tbody>
         </table>
+        <div class="calc-ue-note" id="calc-ue-note-${sem}-${ueIdx}"></div>
       </div>`;
     });
 
@@ -85,6 +95,7 @@ export const Calc = {
         </div>
       </div>
     </div>
+    <div class="calc-official-note" id="calc-official-note-${sem}"></div>
     <div class="meme-box" id="meme-box-${sem}"></div>`;
 
     const bodyEl = $('calc-body');
@@ -124,6 +135,11 @@ export const Calc = {
   recalc(sem) {
     const data = Curriculum.CALC_DATA[sem];
     let semWeighted = 0, semCoefUsed = 0, semIsPartial = false;
+    // Collected across all UEs for this semester, to build the note below —
+    // module names bucketed by the official catch-up rule that applies to them.
+    const mandatoryRetake = []; // avg < 5 — "نقطة إقصائية", catch-up compulsory
+    const optionalRetake  = []; // 5 <= avg < 10 — catch-up optional
+    const weakUEs = [];         // UE avg < 8 — must catch-up to raise above 8
 
     data.forEach((ue, ueIdx) => {
       let ueWeighted = 0, ueCoefFilled = 0;
@@ -134,6 +150,7 @@ export const Calc = {
         const tdEl = $(`calc-td-${uid}`);
         const examEl = $(`calc-exam-${uid}`);
         const avgEl = $(`calc-avg-${uid}`);
+        const statusEl = $(`calc-status-${uid}`);
         if (!tdEl || !examEl || !avgEl) return;
 
         const tdStr = tdEl.value.trim(), examStr = examEl.value.trim();
@@ -143,37 +160,94 @@ export const Calc = {
           const avg = (td * 0.33) + (exam * 0.67);
           const r = Math.round(avg * 100) / 100;
           avgEl.textContent = r.toFixed(2);
-          avgEl.className = 'calc-avg-cell ' + (r >= 10 ? 'avg-good' : r >= 8 ? 'avg-warn' : 'avg-bad');
+          // Thresholds per the official catch-up (استدراك) notice:
+          // >=10 pass (no retake allowed), 5-10 optional retake, <5 mandatory.
+          // (Distinct from the UE-level <8 rule handled separately below.)
+          avgEl.className = 'calc-avg-cell ' + (r >= 10 ? 'avg-good' : r >= 5 ? 'avg-warn' : 'avg-bad');
+          if (statusEl) {
+            if (r < 5) {
+              statusEl.textContent = 'استدراك إجباري';
+              statusEl.className = 'calc-status-tag tag-bad';
+              mandatoryRetake.push(mod.name);
+            } else if (r < 10) {
+              statusEl.textContent = 'استدراك اختياري';
+              statusEl.className = 'calc-status-tag tag-warn';
+              optionalRetake.push(mod.name);
+            } else {
+              statusEl.textContent = 'ناجح ✓';
+              statusEl.className = 'calc-status-tag tag-good';
+            }
+          }
           ueWeighted += avg * mod.coef;
           ueCoefFilled += mod.coef;
         } else {
           avgEl.textContent = '\u2014';
           avgEl.className = 'calc-avg-cell avg-empty';
+          if (statusEl) { statusEl.textContent = ''; statusEl.className = 'calc-status-tag'; }
         }
       });
 
       const badgeEl = $(`calc-ue-badge-${sem}-${ueIdx}`);
       const ueValEl = $(`calc-ue-val-${sem}-${ueIdx}`);
+      const ueNoteEl = $(`calc-ue-note-${sem}-${ueIdx}`);
       if (ueCoefFilled > 0) {
         const ueAvg = ueWeighted / ueCoefFilled;
         const ueR = Math.round(ueAvg * 100) / 100;
         const partial = ueCoefFilled < ueTotalCoef;
         const suffix = partial ? ' *' : '';
-        if (badgeEl) badgeEl.textContent = ueR.toFixed(2) + ' / 20' + suffix;
+        if (badgeEl) {
+          badgeEl.textContent = ueR.toFixed(2) + ' / 20' + suffix;
+          badgeEl.classList.toggle('badge-weak', ueR < 8);
+        }
         if (ueValEl) ueValEl.textContent = ueR.toFixed(2) + suffix;
+        if (ueNoteEl) {
+          if (ueR < 8) {
+            ueNoteEl.textContent = `⚠️ معدل الوحدة أقل من 8 — يجب اجتياز الاستدراك لرفعه`;
+            ueNoteEl.className = 'calc-ue-note note-bad';
+            weakUEs.push(ue.code);
+          } else {
+            ueNoteEl.textContent = '';
+            ueNoteEl.className = 'calc-ue-note';
+          }
+        }
         semWeighted += ueAvg * ue.ueCoef;
         semCoefUsed += ue.ueCoef;
         if (partial) semIsPartial = true;
       } else {
-        if (badgeEl) badgeEl.textContent = '\u2014 / 20';
+        if (badgeEl) { badgeEl.textContent = '\u2014 / 20'; badgeEl.classList.remove('badge-weak'); }
         if (ueValEl) ueValEl.textContent = '\u2014';
+        if (ueNoteEl) { ueNoteEl.textContent = ''; ueNoteEl.className = 'calc-ue-note'; }
         semIsPartial = true;
       }
     });
 
     const semValEl = $(`calc-sem-val-${sem}`);
     const semMentionEl = $(`calc-sem-mention-${sem}`);
+    const officialNoteEl = $(`calc-official-note-${sem}`);
     if (!semValEl) return;
+
+    // Synthesized note based on the official catch-up rules, built from
+    // whatever's been entered so far (updates live, same as the partial
+    // semester average already does).
+    if (officialNoteEl) {
+      if (mandatoryRetake.length === 0 && optionalRetake.length === 0 && weakUEs.length === 0) {
+        officialNoteEl.textContent = '';
+        officialNoteEl.className = 'calc-official-note';
+      } else {
+        let html = '';
+        if (mandatoryRetake.length) {
+          html += `<div class="note-line note-bad">🔴 <strong>نجاح بدين (قرار أولي):</strong> نقطة إقصائية (أقل من 5) في: ${mandatoryRetake.join('، ')}. اجتياز الاستدراك إجباري لهذه المقاييس.</div>`;
+        }
+        if (optionalRetake.length) {
+          html += `<div class="note-line note-warn">🟡 <strong>استدراك اختياري متاح</strong> لتحسين المعدل في: ${optionalRetake.join('، ')}.</div>`;
+        }
+        if (weakUEs.length) {
+          html += `<div class="note-line note-bad">⚠️ الوحدات التالية معدلها أقل من 8: ${weakUEs.join('، ')} — الاستدراك مطلوب لرفعها فوق 8.</div>`;
+        }
+        officialNoteEl.innerHTML = html;
+        officialNoteEl.className = 'calc-official-note has-notes';
+      }
+    }
 
     if (semCoefUsed > 0) {
       const semAvg = semWeighted / semCoefUsed;
@@ -183,6 +257,11 @@ export const Calc = {
 
       if (semIsPartial) {
         semMentionEl.textContent = '(\u062d\u0633\u0627\u0628 \u062c\u0632\u0626\u064a \u2014 \u0623\u062f\u062e\u0644 \u062c\u0645\u064a\u0639 \u0627\u0644\u0639\u0644\u0627\u0645\u0627\u062a)';
+      } else if (mandatoryRetake.length > 0) {
+        // Official notice: a module average below 5 means the semester
+        // is NOT a clean pass yet — "نجاح بدين" (conditional), not "راسب"
+        // outright, since catch-up can still resolve it.
+        semMentionEl.textContent = '🟡 نجاح بدين — قرار أولي';
       } else {
         const mentions = [
           [16, '\ud83c\udfc6 Tr\xe8s Bien'],
