@@ -225,8 +225,8 @@
 
 <script>
   function setLang(lang) {
-    document.getElementById('content-en').style.display = lang === 'en' ? '' : 'none';
-    document.getElementById('content-ar').style.display = lang === 'ar' ? '' : 'none';
+    document.getElementById('content-en').style.display = lang === 'en' ? 'block' : 'none';
+    document.getElementById('content-ar').style.display = lang === 'ar' ? 'block' : 'none';
     document.getElementById('btn-en').classList.toggle('active', lang === 'en');
     document.getElementById('btn-ar').classList.toggle('active', lang === 'ar');
     document.documentElement.lang = lang;
