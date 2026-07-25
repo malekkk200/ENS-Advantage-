@@ -364,24 +364,10 @@
   <!-- GRADE CALCULATOR -->
   <section class="calc-section-bg">
     <div style="max-width:900px;margin:0 auto;">
-      <!-- Official catch-up (استدراك) rules reference — condensed from the
-           department's official notice. Static/always-present (not
-           re-rendered on tab switch) since it doesn't depend on grades. -->
-      <div class="calc-rules-box">
-        <button type="button" class="calc-rules-toggle" onclick="App.Calc.toggleRules()" id="calc-rules-toggle-btn">
-          📌 القواعد الرسمية للاستدراك والنجاح بدين <span id="calc-rules-chevron">▾</span>
-        </button>
-        <div class="calc-rules-panel hidden" id="calc-rules-panel" dir="rtl">
-          <ul>
-            <li><strong>معدل المقياس ≥ 10:</strong> ناجح مباشرة. ممنوع منعًا باتًا اجتياز استدراك لهذا المقياس (مخالفة تُعرض صاحبها للمجلس التأديبي).</li>
-            <li><strong>معدل المقياس بين 5 و10:</strong> استدراك اختياري لتحسين المعدل.</li>
-            <li><strong>معدل المقياس &lt; 5 (نقطة إقصائية):</strong> "نجاح بدين" — قرار أولي غير نهائي. اجتياز الاستدراك إجباري للتحصيل والنجاح؛ في حال عدم اجتيازه يمكن إعلانه راسبًا.</li>
-            <li><strong>معدل الوحدة (UE) &lt; 8:</strong> يجب اجتياز الاستدراك لرفع معدل الوحدة إلى أكثر من 8.</li>
-            <li>الطالب الناجح بدين مُطالَب بدراسة المقياس (أو المقاييس) المعنية حضوريًا خلال السنة الجامعية المقبلة لتحصيلها.</li>
-          </ul>
-          <p class="calc-rules-disclaimer">هذا ملخص للتوضيح الرسمي المعمول به، لأغراض إرشادية فقط — القرار النهائي يعود دائمًا لمصلحة التقييم بالمؤسسة.</p>
-        </div>
-      </div>
+      <!-- Official catch-up (استدراك) rules are now explained inline,
+           attached to each student's own calculated result (see
+           calc-official-note in js/calc.js) — not as a separate static
+           text block, since that isn't personalized/actionable. -->
       <div class="calc-header-block">
         <h2 class="section-title">Grade Calculator &mdash; <span style="font-family:'Cairo',sans-serif;font-size:1.4rem;">حساب المعدل</span></h2>
         <p class="section-sub" style="margin-bottom:0;">&#x623;&#x62F;&#x62E;&#x644; &#x639;&#x644;&#x627;&#x645;&#x629; TD &#x648;&#x639;&#x644;&#x627;&#x645;&#x629; Exam &#x644;&#x643;&#x644; &#x645;&#x642;&#x64A;&#x627;&#x633; &#x648;&#x633;&#x64A;&#x62A;&#x645; &#x627;&#x62D;&#x62A;&#x633;&#x627;&#x628; &#x627;&#x644;&#x645;&#x639;&#x62F;&#x644; &#x62A;&#x644;&#x642;&#x627;&#x626;&#x64A;&#x64B;&#x627;</p>

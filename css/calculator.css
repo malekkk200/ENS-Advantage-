@@ -59,24 +59,6 @@
   .calc-ue-item-val { font-size: 1.15rem; font-weight: 700; }
   .calc-partial-note { font-size: .72rem; opacity: .55; margin-top: .5rem; text-align: right; }
 
-  /* ─── OFFICIAL RULES REFERENCE PANEL ─── */
-  .calc-rules-box { margin-bottom: 1.25rem; }
-  .calc-rules-toggle {
-    width: 100%; text-align: right; direction: rtl; font-family: 'Cairo', sans-serif;
-    background: var(--slate-100); border: 1px solid var(--slate-200); border-radius: var(--radius-md);
-    padding: .75rem 1.1rem; font-size: .88rem; font-weight: 700; color: var(--navy);
-    cursor: pointer; transition: background .15s;
-  }
-  .calc-rules-toggle:hover { background: var(--slate-200); }
-  .calc-rules-panel {
-    background: white; border: 1px solid var(--slate-200); border-top: none;
-    border-radius: 0 0 var(--radius-md) var(--radius-md); padding: 1rem 1.25rem;
-    font-family: 'Cairo', sans-serif;
-  }
-  .calc-rules-panel ul { margin: 0 0 .75rem; padding-inline-start: 1.3rem; }
-  .calc-rules-panel li { font-size: .85rem; line-height: 1.9; color: var(--slate-700); }
-  .calc-rules-disclaimer { font-size: .75rem; color: var(--slate-400); margin: 0; }
-
   /* ─── PER-MODULE / PER-UE STATUS TAGS ─── */
   .calc-status-tag {
     font-family: 'Cairo', sans-serif; font-size: .68rem; font-weight: 700;
@@ -93,16 +75,24 @@
   }
   .calc-ue-note.note-bad { color: var(--red); padding-bottom: .5rem; }
 
-  /* ─── SYNTHESIZED SEMESTER NOTE ─── */
+  /* ─── RESULT-LINKED NOTE ───
+     "What you need to succeed, and where you failed" — built from this
+     student's own entered grades, shown as a callout directly under
+     their result card (accent border ties it visually to the result
+     above it), not a separate reference block. */
   .calc-official-note { direction: rtl; }
   .calc-official-note.has-notes {
-    margin-top: .75rem; background: white; border: 1px solid var(--slate-200);
-    border-radius: var(--radius-md); padding: .9rem 1.1rem;
+    margin-top: .75rem; padding: 1rem 1.25rem;
+    border-radius: var(--radius-md); border-inline-start: 4px solid;
   }
+  .calc-official-note.state-bad  { background: #fff7ed; border-color: var(--orange); }
+  .calc-official-note.state-good { background: var(--green-light); border-color: var(--green); }
+  .note-heading { font-family: 'Cairo', sans-serif; font-size: .8rem; font-weight: 800; color: var(--navy); margin-bottom: .5rem; }
   .note-line { font-family: 'Cairo', sans-serif; font-size: .82rem; line-height: 1.8; }
-  .note-line + .note-line { margin-top: .5rem; padding-top: .5rem; border-top: 1px dashed var(--slate-200); }
-  .note-line.note-bad { color: var(--red); }
-  .note-line.note-warn { color: var(--orange); }
+  .note-line + .note-line { margin-top: .5rem; padding-top: .5rem; border-top: 1px dashed rgba(0,0,0,.08); }
+  .note-line.note-bad { color: #9a3412; }
+  .note-line.note-warn { color: #9a3412; }
+  .note-line.note-good { color: #166534; font-weight: 700; }
   @media (max-width: 640px) {
     .calc-input { width: 58px; font-size: .8rem; }
     .calc-table th, .calc-table td { padding: .5rem .6rem; }

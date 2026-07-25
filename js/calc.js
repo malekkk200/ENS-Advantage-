@@ -10,14 +10,6 @@ import { MemeSystem } from './memeSystem.js';
    GRADE CALCULATOR
 ───────────────────────────────────────────────────────────── */
 export const Calc = {
-  toggleRules() {
-    const panel = $('calc-rules-panel');
-    const chevron = $('calc-rules-chevron');
-    if (!panel) return;
-    const nowHidden = panel.classList.toggle('hidden');
-    if (chevron) chevron.textContent = nowHidden ? '▾' : '▴';
-  },
-
   switchSem(sem) {
     State.calcActiveSem = sem;
     $('calc-tab-1').classList.toggle('active', sem === 1);
@@ -140,6 +132,7 @@ export const Calc = {
     const mandatoryRetake = []; // avg < 5 — "نقطة إقصائية", catch-up compulsory
     const optionalRetake  = []; // 5 <= avg < 10 — catch-up optional
     const weakUEs = [];         // UE avg < 8 — must catch-up to raise above 8
+    let filledModulesCount = 0;
 
     data.forEach((ue, ueIdx) => {
       let ueWeighted = 0, ueCoefFilled = 0;
@@ -180,6 +173,7 @@ export const Calc = {
           }
           ueWeighted += avg * mod.coef;
           ueCoefFilled += mod.coef;
+          filledModulesCount++;
         } else {
           avgEl.textContent = '\u2014';
           avgEl.className = 'calc-avg-cell avg-empty';
@@ -226,26 +220,31 @@ export const Calc = {
     const officialNoteEl = $(`calc-official-note-${sem}`);
     if (!semValEl) return;
 
-    // Synthesized note based on the official catch-up rules, built from
-    // whatever's been entered so far (updates live, same as the partial
-    // semester average already does).
+    // This is the answer to "what do I need to succeed, and where did I
+    // fail" — built entirely from the grades this student just entered,
+    // not a copy of the official notice. Shows as soon as at least one
+    // module has been calculated, and always states a clear verdict
+    // (including the all-clear case), not just when there's a problem.
     if (officialNoteEl) {
-      if (mandatoryRetake.length === 0 && optionalRetake.length === 0 && weakUEs.length === 0) {
-        officialNoteEl.textContent = '';
+      if (filledModulesCount === 0) {
+        officialNoteEl.innerHTML = '';
         officialNoteEl.className = 'calc-official-note';
+      } else if (mandatoryRetake.length === 0 && optionalRetake.length === 0 && weakUEs.length === 0) {
+        officialNoteEl.innerHTML = `<div class="note-line note-good">✅ <strong>ناجح مباشرة</strong> في جميع المقاييس المُدخلة — لا حاجة لأي استدراك.</div>`;
+        officialNoteEl.className = 'calc-official-note has-notes state-good';
       } else {
-        let html = '';
+        let html = `<div class="note-heading">🎯 ماذا تحتاج للنجاح:</div>`;
         if (mandatoryRetake.length) {
-          html += `<div class="note-line note-bad">🔴 <strong>نجاح بدين (قرار أولي):</strong> نقطة إقصائية (أقل من 5) في: ${mandatoryRetake.join('، ')}. اجتياز الاستدراك إجباري لهذه المقاييس.</div>`;
+          html += `<div class="note-line note-bad">🔴 <strong>يجب عليك اجتياز الاستدراك</strong> في: ${mandatoryRetake.join('، ')} — معدلك فيها أقل من 5 (نقطة إقصائية، نجاح بدين).</div>`;
         }
         if (optionalRetake.length) {
-          html += `<div class="note-line note-warn">🟡 <strong>استدراك اختياري متاح</strong> لتحسين المعدل في: ${optionalRetake.join('، ')}.</div>`;
+          html += `<div class="note-line note-warn">🟡 <strong>يمكنك تحسين معدلك</strong> باستدراك اختياري في: ${optionalRetake.join('، ')} (معدلك بين 5 و10).</div>`;
         }
         if (weakUEs.length) {
-          html += `<div class="note-line note-bad">⚠️ الوحدات التالية معدلها أقل من 8: ${weakUEs.join('، ')} — الاستدراك مطلوب لرفعها فوق 8.</div>`;
+          html += `<div class="note-line note-bad">⚠️ معدل الوحدة أقل من 8 في: ${weakUEs.join('، ')} — الاستدراك مطلوب لرفعه فوق 8.</div>`;
         }
         officialNoteEl.innerHTML = html;
-        officialNoteEl.className = 'calc-official-note has-notes';
+        officialNoteEl.className = 'calc-official-note has-notes state-bad';
       }
     }
 
