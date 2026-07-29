@@ -59,10 +59,10 @@
   .modal-banner-text { font-size: .9rem; }
   .modal-banner-text strong { display: block; font-size: 1rem; font-weight: 700; }
 
-  /* ─── BOTH PLAN BEST-VALUE ANIMATION ─── */
+  /* ─── BOTH PLAN BEST-VALUE ANIMATION (subtle/slow) ─── */
   @keyframes bestValuePulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(37,99,235,.28), 0 2px 10px rgba(37,99,235,.12); border-color: var(--accent); }
-    50%       { box-shadow: 0 0 0 7px rgba(37,99,235,0), 0 6px 24px rgba(37,99,235,.35); border-color: #60a5fa; }
+    0%, 100% { box-shadow: 0 0 0 0 rgba(37,99,235,.20), 0 2px 10px rgba(37,99,235,.10); border-color: var(--accent); }
+    50%       { box-shadow: 0 0 0 5px rgba(37,99,235,0), 0 4px 18px rgba(37,99,235,.22); border-color: #60a5fa; }
   }
   @keyframes shimmerPrice {
     0%   { background-position: -200% center; }
@@ -73,7 +73,7 @@
     50%       { transform: translateY(-2px); }
   }
   #plan-BOTH {
-    animation: bestValuePulse 2.4s ease-in-out infinite;
+    animation: bestValuePulse 4.2s ease-in-out infinite;
     background: linear-gradient(135deg, #eff6ff 0%, #e0f2fe 50%, #eff6ff 100%) !important;
   }
   #plan-BOTH .plan-price {
@@ -81,14 +81,14 @@
     background-size: 300% auto;
     -webkit-background-clip: text; background-clip: text;
     -webkit-text-fill-color: transparent;
-    animation: shimmerPrice 3s linear infinite;
+    animation: shimmerPrice 5s linear infinite;
   }
   #plan-BOTH .plan-name { color: var(--navy); }
 
-  /* ─── ELITE MEMBER BADGE (both semesters) ─── */
+  /* ─── ELITE MEMBER BADGE (both semesters) — purple/violet, subtle/slow ─── */
   @keyframes eliteGlow {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,.45), 0 2px 14px rgba(245,158,11,.25); }
-    50%       { box-shadow: 0 0 0 9px rgba(245,158,11,0),  0 4px 22px rgba(245,158,11,.5); }
+    0%, 100% { box-shadow: 0 0 0 0 rgba(139,92,246,.35), 0 2px 12px rgba(139,92,246,.18); }
+    50%       { box-shadow: 0 0 0 6px rgba(139,92,246,0),  0 4px 18px rgba(139,92,246,.32); }
   }
   @keyframes eliteShimmer {
     0%   { background-position: -200% center; }
@@ -97,13 +97,13 @@
   .elite-badge {
     display: inline-flex; align-items: center; gap: .45rem;
     padding: .46rem 1.15rem; border-radius: 999px;
-    background: linear-gradient(90deg, #92400e 0%, #d97706 30%, #fbbf24 55%, #d97706 75%, #92400e 100%);
+    background: linear-gradient(90deg, #4c1d95 0%, #7c3aed 30%, #c4b5fd 55%, #7c3aed 75%, #4c1d95 100%);
     background-size: 250% auto;
     color: white; font-size: .82rem; font-weight: 700;
-    animation: eliteGlow 2.5s ease-in-out infinite, eliteShimmer 4.5s linear infinite;
+    animation: eliteGlow 4s ease-in-out infinite, eliteShimmer 7s linear infinite;
     white-space: nowrap; letter-spacing: .03em;
     text-shadow: 0 1px 3px rgba(0,0,0,.35);
-    border: 1px solid rgba(251,191,36,.4);
+    border: 1px solid rgba(196,181,253,.4);
   }
 
   /* ─── PARTIAL SUBSCRIPTION BADGE (one semester) ─── */
