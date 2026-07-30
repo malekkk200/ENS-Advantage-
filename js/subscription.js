@@ -6,24 +6,54 @@
 ═══════════════════════════════════════════════════════════════ */
 import { $ } from './dom.js';
 import { State } from './state.js';
-import { Supabase } from './supabaseClient.js';
+import { Supabase, sb } from './supabaseClient.js';
 
 /* ─────────────────────────────────────────────────────────────
    SUBSCRIPTION MODAL
 ───────────────────────────────────────────────────────────── */
-export const Subscription = {
-  PRICES: { S1: '2,000 DZD', S2: '2,000 DZD', BOTH: '3,500 DZD' },
+const fmt = (n) => n.toLocaleString('en-US') + ' DZD';
 
-  open(defaultSemester) {
+export const Subscription = {
+  BASE_PRICES: { S1: 2000, S2: 2000, BOTH: 3500 },
+  DISCOUNT_RATE: 0.4, // new-student first-subscription offer
+
+  discountedPrice(plan) {
+    return Math.round(this.BASE_PRICES[plan] * (1 - this.DISCOUNT_RATE));
+  },
+  currentPrice(plan) {
+    return State.discountEligible ? this.discountedPrice(plan) : this.BASE_PRICES[plan];
+  },
+
+  /**
+   * "New student" = never had an APPROVED subscription before. This is only
+   * used to decide what to *show*; the real, trusted decision is always
+   * re-checked server-side in the submit-subscription Edge Function, which
+   * ignores anything the client claims.
+   */
+  async checkDiscountEligibility() {
+    if (!State.currentUser?.id) { State.discountEligible = false; return; }
+    const { count } = await sb
+      .from('subscription_requests')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', State.currentUser.id)
+      .eq('status', 'approved');
+    State.discountEligible = (count ?? 0) === 0;
+  },
+
+  async open(defaultSemester) {
     State.subModalDefaultSemester = defaultSemester;
     State.selectedPlan = defaultSemester === 2 ? 'S2' : 'S1';
     $('tx-ref').value = '';
     this.updateSubmitBtn();
     $('sub-success').classList.add('hidden');
     $('sub-normal').classList.remove('hidden');
-    this.updatePlanUI();
     $('sub-modal').classList.remove('hidden');
     State.subModalOpen = true;
+    // Show the modal immediately with list prices, then upgrade to the
+    // discounted view once eligibility comes back (usually instant).
+    this.updatePlanUI();
+    await this.checkDiscountEligibility();
+    this.updatePlanUI();
   },
 
   close() {
@@ -43,11 +73,27 @@ export const Subscription = {
   },
 
   updatePlanUI() {
+    const eligible = !!State.discountEligible;
+    const banner = $('discount-banner');
+    if (banner) banner.classList.toggle('hidden', !eligible);
+
     ['S1', 'S2', 'BOTH'].forEach((id) => {
       const el = $('plan-' + id);
       if (el) el.classList.toggle('selected', id === State.selectedPlan);
+
+      const priceEl = $('price-' + id);
+      const origEl = $('price-orig-' + id);
+      if (!priceEl) return;
+      if (eligible) {
+        priceEl.textContent = fmt(this.discountedPrice(id));
+        if (origEl) { origEl.textContent = fmt(this.BASE_PRICES[id]); origEl.classList.remove('hidden'); }
+      } else {
+        priceEl.textContent = fmt(this.BASE_PRICES[id]);
+        if (origEl) origEl.classList.add('hidden');
+      }
     });
-    $('modal-price').textContent = this.PRICES[State.selectedPlan];
+
+    $('modal-price').textContent = fmt(this.currentPrice(State.selectedPlan));
   },
 
   copy(text, id) {

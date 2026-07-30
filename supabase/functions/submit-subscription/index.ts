@@ -64,7 +64,27 @@ serve(async (req) => {
 
     const full_name = String(body.full_name ?? "").trim().slice(0, 200);
 
-    // 4. Duplicate transaction reference detection
+    // 4. Pricing + new-student 40% discount — determined server-side only.
+    //    The client never gets to say "I get the discount"; eligibility is
+    //    recomputed here from the source of truth (has this user_id ever
+    //    had an APPROVED subscription_requests row?). Rejected/pending
+    //    requests do not disqualify — only a past approved subscription does.
+    const BASE_PRICES_DZD: Record<string, number> = { S1: 2000, S2: 2000, BOTH: 3500 };
+    const DISCOUNT_RATE = 0.4;
+
+    const { count: approvedCount } = await supabaseAdmin
+      .from("subscription_requests")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("status", "approved");
+
+    const isDiscountEligible = (approvedCount ?? 0) === 0;
+    const basePrice = BASE_PRICES_DZD[plan];
+    const amount_dzd = isDiscountEligible
+      ? Math.round(basePrice * (1 - DISCOUNT_RATE))
+      : basePrice;
+
+    // 5. Duplicate transaction reference detection
     const { data: dup } = await supabaseAdmin
       .from("subscription_requests")
       .select("id")
@@ -75,7 +95,7 @@ serve(async (req) => {
       return json({ error: "This transaction reference has already been submitted. Contact support if this is an error." }, 409);
     }
 
-    // 5. Insert — identity comes from JWT, not the request body
+    // 6. Insert — identity comes from JWT, not the request body
     const { error: insertError } = await supabaseAdmin
       .from("subscription_requests")
       .insert({
@@ -84,6 +104,8 @@ serve(async (req) => {
         full_name,
         plan,
         transaction_ref,
+        is_discounted: isDiscountEligible,
+        amount_dzd,
       });
 
     if (insertError) {
@@ -91,7 +113,7 @@ serve(async (req) => {
       return json({ error: "Failed to submit request. Please try again." }, 500);
     }
 
-    return json({ success: true });
+    return json({ success: true, is_discounted: isDiscountEligible, amount_dzd });
 
   } catch (err) {
     console.error("unhandled error:", err);

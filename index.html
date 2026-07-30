@@ -485,24 +485,28 @@
         <!-- Plan selection -->
         <div style="margin-bottom:1.25rem;">
           <div style="font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--slate-500);margin-bottom:.75rem;">Select Your Plan</div>
+          <div id="discount-banner" class="discount-banner hidden">🎉 <strong>New Student Offer</strong> — 40% off your first subscription, any plan!</div>
           <div class="plan-grid">
             <label class="plan-card" id="plan-S1" onclick="App.Subscription.selectPlan('S1')">
               <div class="plan-check">✓</div>
               <div style="font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--slate-400);margin-bottom:.35rem;">S1 only</div>
               <div class="plan-name">Semester 1</div>
-              <div class="plan-price">2,000 DZD</div>
+              <span class="plan-price-original hidden" id="price-orig-S1">2,000 DZD</span>
+              <div class="plan-price" id="price-S1">2,000 DZD</div>
             </label>
             <label class="plan-card" id="plan-S2" onclick="App.Subscription.selectPlan('S2')">
               <div class="plan-check">✓</div>
               <div style="font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--slate-400);margin-bottom:.35rem;">S2 only</div>
               <div class="plan-name">Semester 2</div>
-              <div class="plan-price">2,000 DZD</div>
+              <span class="plan-price-original hidden" id="price-orig-S2">2,000 DZD</span>
+              <div class="plan-price" id="price-S2">2,000 DZD</div>
             </label>
             <label class="plan-card" id="plan-BOTH" onclick="App.Subscription.selectPlan('BOTH')">
               <div class="plan-check">✓</div>
               <div style="font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--slate-400);margin-bottom:.35rem;">Best value</div>
               <div class="plan-name">Both Semesters</div>
-              <div class="plan-price">3,500 DZD</div>
+              <span class="plan-price-original hidden" id="price-orig-BOTH">3,500 DZD</span>
+              <div class="plan-price" id="price-BOTH">3,500 DZD</div>
             </label>
           </div>
         </div>
