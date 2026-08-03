@@ -10,6 +10,7 @@ import { $, escHtml } from './dom.js';
 import { State } from './state.js';
 import { Supabase, sb } from './supabaseClient.js';
 import { MemeSystem } from './memeSystem.js';
+import { BackNav } from './backNav.js';
 
 // ── Category metadata (display labels for the UI) ─────────────────────────
 export const MEME_CATEGORIES = [
@@ -38,9 +39,11 @@ export const MemeAdmin = {
     if (!_isAuthorizedAdmin()) return;
     $('meme-admin-modal').classList.remove('hidden');
     this._loadAll();
+    BackNav.push(() => this.close());
   },
 
   close() {
+    BackNav.notifyClose();
     $('meme-admin-modal').classList.add('hidden');
     this._resetUploadForm();
   },

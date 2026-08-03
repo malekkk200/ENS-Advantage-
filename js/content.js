@@ -9,6 +9,7 @@ import { $, escHtml, lockBodyScroll, unlockBodyScroll } from './dom.js';
 import { PDFViewer } from './pdfViewer.js';
 import { Subscription } from './subscription.js';
 import { paintWatermark } from './watermark.js';
+import { BackNav } from './backNav.js';
 
 /* ─────────────────────────────────────────────────────────────
    CONTENT VIEWER  (HTML fallback — used only when no PDF exists)
@@ -29,6 +30,16 @@ export const Content = {
     // Gate premium content before any network call
     if (type !== 'summary' && !hasPrem) {
       Subscription.open(State.activeSemester);
+      return;
+    }
+
+    // The Comprehensive Guide is a dedicated text+images window and is
+    // NEVER shown through the PDF viewer, even if a PDF happened to be
+    // registered for it in course_materials (e.g. from before the
+    // guide upload flow switched to text+images) — guaranteed here
+    // rather than relying on there simply being no such PDF rows today.
+    if (type === 'guide') {
+      await this._openGuide(mod, modName);
       return;
     }
 
@@ -70,6 +81,25 @@ export const Content = {
 
     const safeHtml = DOMPurify.sanitize(
       (data?.content_html) ? data.content_html : this._fallbackHtml(mod, type),
+      { USE_PROFILES: { html: true } }
+    );
+    $('cv-content').innerHTML = safeHtml;
+  },
+
+  /** Always opens the Comprehensive Guide as a plain scrollable window — never the PDF viewer. */
+  async _openGuide(mod, modName) {
+    this._showHtml(mod, 'guide',
+      '<div class="mock-content"><p style="text-align:center;padding:2rem">⏳ Loading…</p></div>');
+
+    const { data } = await sb
+      .from('guides')
+      .select('content_html')
+      .eq('module_name', modName)
+      .eq('semester', State.activeSemester)
+      .single();
+
+    const safeHtml = DOMPurify.sanitize(
+      (data?.content_html) ? data.content_html : this._fallbackHtml(mod, 'guide'),
       { USE_PROFILES: { html: true } }
     );
     $('cv-content').innerHTML = safeHtml;
@@ -178,9 +208,11 @@ export const Content = {
     }
     $('content-overlay').classList.remove('hidden');
     lockBodyScroll();
+    BackNav.push(() => this.close());
   },
 
   close() {
+    BackNav.notifyClose();
     $('content-overlay').classList.add('hidden');
     unlockBodyScroll();
     State.contentViewerActive = false;

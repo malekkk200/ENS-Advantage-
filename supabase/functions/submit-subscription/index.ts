@@ -64,6 +64,40 @@ serve(async (req) => {
 
     const full_name = String(body.full_name ?? "").trim().slice(0, 200);
 
+    // 3b. Re-check the user's ALREADY-GRANTED access (source of truth,
+    //     set by the admin approving a previous request) — never trust
+    //     anything the client claims here. Once a semester is approved:
+    //       • that same semester can't be bought again
+    //       • "BOTH" can't be bought anymore either (it would just be
+    //         re-selling something already partially owned) — only the
+    //         other, still-missing semester remains purchasable.
+    const { data: profile, error: profileErr } = await supabaseAdmin
+      .from("user_profiles")
+      .select("has_s1_access, has_s2_access")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (profileErr) {
+      console.error("profile lookup error:", profileErr);
+      return json({ error: "Failed to verify current subscription status." }, 500);
+    }
+
+    const hasS1 = !!profile?.has_s1_access;
+    const hasS2 = !!profile?.has_s2_access;
+
+    if (hasS1 && hasS2) {
+      return json({ error: "You already have full access to both semesters." }, 409);
+    }
+    if (plan === "BOTH" && (hasS1 || hasS2)) {
+      return json({ error: `You already have Semester ${hasS1 ? "1" : "2"} — you can only subscribe to Semester ${hasS1 ? "2" : "1"} now.` }, 409);
+    }
+    if (plan === "S1" && hasS1) {
+      return json({ error: "You already have access to Semester 1." }, 409);
+    }
+    if (plan === "S2" && hasS2) {
+      return json({ error: "You already have access to Semester 2." }, 409);
+    }
+
     // 4. Pricing + new-student 40% discount — determined server-side only.
     //    The client never gets to say "I get the discount"; eligibility is
     //    recomputed here from the source of truth (has this user_id ever

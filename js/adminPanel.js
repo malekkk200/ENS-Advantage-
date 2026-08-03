@@ -27,13 +27,18 @@ import { Supabase } from './supabaseClient.js';
 import { UI } from './ui.js';
 import { Modules } from './modules.js';
 import { PDFCompressor } from './pdfCompressor.js';
+import { BackNav } from './backNav.js';
 
 function _isAuthorizedAdmin() {
   return State.currentProfile?.is_admin === true;
 }
 
+const MAX_GUIDE_IMAGE_BYTES = 10 * 1024 * 1024; // matches the guide-images bucket limit
+const GUIDE_IMAGE_MIME = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+
 export const AdminPanel = {
   _selectedFile: null,
+  _selectedGuideImages: [], // File[] for the guide text+images upload path
 
   /** Show the admin button only for the one authorized account */
   refreshVisibility() {
@@ -49,9 +54,11 @@ export const AdminPanel = {
     this._resetForm();
     this.onSemesterChange();
     $('admin-modal').classList.remove('hidden');
+    BackNav.push(() => this.close());
   },
 
   close() {
+    BackNav.notifyClose();
     $('admin-modal').classList.add('hidden');
   },
 
@@ -61,13 +68,83 @@ export const AdminPanel = {
 
   _resetForm() {
     this._selectedFile = null;
+    this._selectedGuideImages = [];
     $('admin-title').value = '';
     $('admin-category').value = 'summary';
     $('admin-file-input').value = '';
     $('admin-file-name').classList.add('hidden');
     $('admin-file-name').textContent = '';
     $('admin-file-drop-text').textContent = 'اضغط لاختيار ملف PDF أو اسحبه هنا';
+    $('admin-guide-text').value = '';
+    $('admin-guide-images-input').value = '';
+    $('admin-guide-images-preview').innerHTML = '';
+    $('admin-guide-images-text').textContent = 'اضغط لاختيار صورة أو أكثر';
     this._setStatus(null);
+    this.onCategoryChange();
+  },
+
+  /** Switches the form between the PDF path and the guide text+images path. */
+  onCategoryChange() {
+    const category = $('admin-category').value;
+    const isGuide = category === 'guide';
+    $('admin-pdf-fields').classList.toggle('hidden', isGuide);
+    $('admin-guide-fields').classList.toggle('hidden', !isGuide);
+    $('admin-submit-btn').textContent = isGuide ? 'رفع الدليل الآن' : 'رفع الملف الآن';
+  },
+
+  onGuideImagesSelected(e) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    const rejected = [];
+    const accepted = [];
+    for (const file of files) {
+      if (!GUIDE_IMAGE_MIME.includes(file.type)) { rejected.push(file.name); continue; }
+      if (file.size > MAX_GUIDE_IMAGE_BYTES) { rejected.push(file.name); continue; }
+      accepted.push(file);
+    }
+
+    this._selectedGuideImages = this._selectedGuideImages.concat(accepted);
+    e.target.value = ''; // allow re-picking the same file name later
+
+    if (rejected.length) {
+      this._setStatus('error', `تم تجاهل ${rejected.length} صورة (نوع أو حجم غير مدعوم — الحد الأقصى 10 ميجابايت لكل صورة)`);
+    }
+
+    $('admin-guide-images-text').textContent =
+      this._selectedGuideImages.length ? `تم اختيار ${this._selectedGuideImages.length} صورة — اضغط لإضافة المزيد` : 'اضغط لاختيار صورة أو أكثر';
+
+    this._renderGuideImagePreviews();
+  },
+
+  _renderGuideImagePreviews() {
+    const wrap = $('admin-guide-images-preview');
+    wrap.innerHTML = '';
+    this._selectedGuideImages.forEach((file, i) => {
+      const thumb = document.createElement('div');
+      thumb.style.cssText = 'position:relative;width:64px;height:64px;border-radius:8px;overflow:hidden;border:1px solid var(--slate-200,#e2e8f0);';
+
+      const img = document.createElement('img');
+      img.src = URL.createObjectURL(file);
+      img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
+      img.onload = () => URL.revokeObjectURL(img.src);
+
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.textContent = '✕';
+      removeBtn.title = 'إزالة';
+      removeBtn.style.cssText = 'position:absolute;top:2px;right:2px;width:18px;height:18px;line-height:18px;padding:0;border:none;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;font-size:.65rem;cursor:pointer;';
+      removeBtn.addEventListener('click', () => {
+        this._selectedGuideImages.splice(i, 1);
+        this._renderGuideImagePreviews();
+        $('admin-guide-images-text').textContent =
+          this._selectedGuideImages.length ? `تم اختيار ${this._selectedGuideImages.length} صورة — اضغط لإضافة المزيد` : 'اضغط لاختيار صورة أو أكثر';
+      });
+
+      thumb.appendChild(img);
+      thumb.appendChild(removeBtn);
+      wrap.appendChild(thumb);
+    });
   },
 
   /** Repopulate the module dropdown whenever the semester changes */
@@ -116,9 +193,11 @@ export const AdminPanel = {
   },
 
   async upload() {
+    const category = $('admin-category').value;
+    if (category === 'guide') { await this._uploadGuide(); return; }
+
     const semester   = parseInt($('admin-semester').value, 10);
     const moduleName = $('admin-module').value;
-    const category   = $('admin-category').value;
     const title      = $('admin-title').value.trim();
 
     if (!moduleName) { this._setStatus('error', 'الرجاء اختيار مادة'); return; }
@@ -176,6 +255,61 @@ export const AdminPanel = {
 
     } catch (err) {
       console.error('[AdminPanel.upload]', err);
+      this._setStatus('error', 'خطأ في الشبكة. تحقق من اتصالك وحاول مجدداً.');
+    } finally {
+      btn.disabled = false;
+    }
+  },
+
+  /**
+   * Text + images path for the Comprehensive Guide. Unlike PDF uploads,
+   * this always opens in the plain HTML content window (never the PDF
+   * viewer) — the text becomes the guide's body and any images are
+   * appended below it. Replaces whatever guide content existed before
+   * for this module/semester (one guide per module/semester, same as
+   * the previous PDF-based guide slot).
+   */
+  async _uploadGuide() {
+    const semester   = parseInt($('admin-semester').value, 10);
+    const moduleName = $('admin-module').value;
+    const title      = $('admin-title').value.trim();
+    const text       = $('admin-guide-text').value.trim();
+
+    if (!moduleName) { this._setStatus('error', 'الرجاء اختيار مادة'); return; }
+    if (!text && this._selectedGuideImages.length === 0) {
+      this._setStatus('error', 'الرجاء إدخال نص أو إضافة صورة واحدة على الأقل');
+      return;
+    }
+
+    const btn = $('admin-submit-btn');
+    btn.disabled = true;
+    this._setStatus('loading', this._selectedGuideImages.length ? 'جارٍ رفع الصور والنص…' : 'جارٍ الحفظ…');
+
+    try {
+      const form = new FormData();
+      form.append('semester', String(semester));
+      form.append('module_name', moduleName);
+      form.append('content_text', text);
+      if (title) form.append('title', title);
+      this._selectedGuideImages.forEach((file, i) => form.append(`image_${i}`, file));
+
+      const { ok, json } = await Supabase.callFunctionMultipart('admin-upload-guide', form);
+
+      if (!ok || json?.error) {
+        this._setStatus('error', json?.error || 'فشل الرفع. حاول مجدداً.');
+        btn.disabled = false;
+        return;
+      }
+
+      this._setStatus('success', '✅ تم حفظ الدليل الشامل بنجاح! يفتح الآن كنافذة للطلاب.');
+      $('admin-guide-text').value = '';
+      this._selectedGuideImages = [];
+      $('admin-guide-images-input').value = '';
+      $('admin-guide-images-preview').innerHTML = '';
+      $('admin-guide-images-text').textContent = 'اضغط لاختيار صورة أو أكثر';
+
+    } catch (err) {
+      console.error('[AdminPanel._uploadGuide]', err);
       this._setStatus('error', 'خطأ في الشبكة. تحقق من اتصالك وحاول مجدداً.');
     } finally {
       btn.disabled = false;

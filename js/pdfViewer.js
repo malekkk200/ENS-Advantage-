@@ -18,6 +18,7 @@ import { sb } from './supabaseClient.js';
 import { State } from './state.js';
 import { lockBodyScroll, unlockBodyScroll } from './dom.js';
 import { paintWatermark } from './watermark.js';
+import { BackNav } from './backNav.js';
 
 // Initialise the PDF.js worker source immediately — this avoids a
 // small delay on first open because the worker script starts loading
@@ -396,6 +397,7 @@ export const PDFViewer = (() => {
       // Show the overlay immediately so the user sees feedback at once
       _el('pdf-overlay').classList.remove('hidden');
       lockBodyScroll();
+      BackNav.push(() => this.close());
 
       State.pdfViewerActive = true;
       State.contentViewerActive = false; // mutually exclusive with HTML viewer
@@ -479,6 +481,7 @@ export const PDFViewer = (() => {
     },
 
     close() {
+      BackNav.notifyClose();
       _el('pdf-overlay').classList.add('hidden');
       unlockBodyScroll();
       State.pdfViewerActive = false;

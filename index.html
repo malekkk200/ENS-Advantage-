@@ -486,6 +486,9 @@
         <div style="margin-bottom:1.25rem;">
           <div style="font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--slate-500);margin-bottom:.75rem;">Select Your Plan</div>
           <div id="discount-banner" class="discount-banner hidden">🎉 <strong>New Student Offer</strong> — 40% off your first subscription, any plan!</div>
+          <div id="sub-full-access-notice" class="hidden" style="padding:.75rem 1rem;background:#ecfdf5;color:#065f46;border-radius:var(--radius-sm);font-size:.85rem;font-weight:600;margin-bottom:.75rem;">
+            ✅ You already have full premium access to both semesters — there's nothing left to subscribe to.
+          </div>
           <div class="plan-grid">
             <label class="plan-card" id="plan-S1" onclick="App.Subscription.selectPlan('S1')">
               <div class="plan-check">✓</div>
@@ -611,7 +614,7 @@
 
       <div class="form-group">
         <label class="form-label">نوع المحتوى</label>
-        <select class="form-select" id="admin-category">
+        <select class="form-select" id="admin-category" onchange="App.AdminPanel.onCategoryChange()">
           <option value="summary">ملخص مجاني (Summary)</option>
           <option value="full_lesson">الدرس الكامل (Full Lesson)</option>
           <option value="guide">الدليل الشامل (Guide)</option>
@@ -623,7 +626,8 @@
         <input class="form-input" id="admin-title" type="text" placeholder="سيُولَّد تلقائياً إن تُرك فارغاً">
       </div>
 
-      <div class="form-group">
+      <!-- PDF upload path — used for Summary + Full Lesson -->
+      <div class="form-group" id="admin-pdf-fields">
         <label class="form-label">ملف PDF</label>
         <div class="admin-file-drop" id="admin-file-drop">
           <input type="file" id="admin-file-input" accept="application/pdf"
@@ -632,6 +636,24 @@
           <div class="admin-file-drop-text" id="admin-file-drop-text">اضغط لاختيار ملف PDF أو اسحبه هنا</div>
           <div class="admin-file-drop-name hidden" id="admin-file-name"></div>
         </div>
+      </div>
+
+      <!-- Text + images path — used for the Comprehensive Guide, opens
+           as a plain scrollable window rather than the PDF viewer -->
+      <div class="form-group hidden" id="admin-guide-fields">
+        <label class="form-label">محتوى الدليل</label>
+        <textarea class="form-input" id="admin-guide-text" rows="8"
+                  placeholder="اكتب هنا محتوى الدليل الشامل — يمكنك إضافة الصور أدناه لتظهر أسفل هذا النص"
+                  style="resize:vertical;font-family:inherit;line-height:1.7;"></textarea>
+
+        <label class="form-label" style="margin-top:.9rem;">الصور (اختياري، يمكن اختيار أكثر من صورة)</label>
+        <div class="admin-file-drop" id="admin-guide-images-drop">
+          <input type="file" id="admin-guide-images-input" accept="image/png,image/jpeg,image/webp,image/gif" multiple
+                 onchange="App.AdminPanel.onGuideImagesSelected(event)">
+          <div class="admin-file-drop-icon">🖼️</div>
+          <div class="admin-file-drop-text" id="admin-guide-images-text">اضغط لاختيار صورة أو أكثر</div>
+        </div>
+        <div id="admin-guide-images-preview" style="display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.6rem;"></div>
       </div>
 
       <button class="admin-submit-btn" id="admin-submit-btn" onclick="App.AdminPanel.upload()">

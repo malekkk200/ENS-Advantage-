@@ -7,6 +7,7 @@
 import { $ } from './dom.js';
 import { State } from './state.js';
 import { Supabase, sb } from './supabaseClient.js';
+import { BackNav } from './backNav.js';
 
 /* ─────────────────────────────────────────────────────────────
    SUBSCRIPTION MODAL
@@ -40,15 +41,39 @@ export const Subscription = {
     State.discountEligible = (count ?? 0) === 0;
   },
 
+  /**
+   * Which plans this user is still allowed to buy, based on the access
+   * flags already granted on their profile (source of truth — set by
+   * the admin approving a previous request). Once one semester is
+   * approved, "BOTH" no longer makes sense (it would just re-sell
+   * something already partially owned) and that same semester can't
+   * be bought again — only the other, still-missing semester can.
+   */
+  eligiblePlans() {
+    const hasS1 = !!State.currentProfile?.has_s1_access;
+    const hasS2 = !!State.currentProfile?.has_s2_access;
+    if (hasS1 && hasS2) return [];
+    if (hasS1) return ['S2'];
+    if (hasS2) return ['S1'];
+    return ['S1', 'S2', 'BOTH'];
+  },
+
   async open(defaultSemester) {
     State.subModalDefaultSemester = defaultSemester;
-    State.selectedPlan = defaultSemester === 2 ? 'S2' : 'S1';
+
+    const eligible = this.eligiblePlans();
+    // Pick a sensible default: the requested semester if it's still
+    // purchasable, otherwise whichever single plan remains eligible.
+    const preferred = defaultSemester === 2 ? 'S2' : 'S1';
+    State.selectedPlan = eligible.includes(preferred) ? preferred : (eligible[0] || preferred);
+
     $('tx-ref').value = '';
     this.updateSubmitBtn();
     $('sub-success').classList.add('hidden');
     $('sub-normal').classList.remove('hidden');
     $('sub-modal').classList.remove('hidden');
     State.subModalOpen = true;
+    BackNav.push(() => this.close());
     // Show the modal immediately with list prices, then upgrade to the
     // discounted view once eligibility comes back (usually instant).
     this.updatePlanUI();
@@ -57,6 +82,7 @@ export const Subscription = {
   },
 
   close() {
+    BackNav.notifyClose();
     $('sub-modal').classList.add('hidden');
     State.subModalOpen = false;
     $('sub-success').classList.add('hidden');
@@ -68,6 +94,7 @@ export const Subscription = {
   },
 
   selectPlan(id) {
+    if (!this.eligiblePlans().includes(id)) return; // defence in depth — card should already be hidden
     State.selectedPlan = id;
     this.updatePlanUI();
   },
@@ -77,9 +104,18 @@ export const Subscription = {
     const banner = $('discount-banner');
     if (banner) banner.classList.toggle('hidden', !eligible);
 
+    const eligiblePlans = this.eligiblePlans();
+
     ['S1', 'S2', 'BOTH'].forEach((id) => {
       const el = $('plan-' + id);
-      if (el) el.classList.toggle('selected', id === State.selectedPlan);
+      if (!el) return;
+
+      // A plan the user already owns (or "BOTH" once any one semester
+      // is owned) simply disappears from the picker — nothing to
+      // reconsider, so there's no reason to show it as an option.
+      const isEligible = eligiblePlans.includes(id);
+      el.classList.toggle('hidden', !isEligible);
+      el.classList.toggle('selected', isEligible && id === State.selectedPlan);
 
       const priceEl = $('price-' + id);
       const origEl = $('price-orig-' + id);
@@ -93,7 +129,17 @@ export const Subscription = {
       }
     });
 
-    $('modal-price').textContent = fmt(this.currentPrice(State.selectedPlan));
+    const submitBtn = $('sub-submit-btn');
+    const fullAccessNotice = $('sub-full-access-notice');
+    if (eligiblePlans.length === 0) {
+      // Already has full access to both semesters — nothing left to sell.
+      $('modal-price').textContent = '—';
+      if (submitBtn) submitBtn.disabled = true;
+      if (fullAccessNotice) fullAccessNotice.classList.remove('hidden');
+    } else {
+      $('modal-price').textContent = fmt(this.currentPrice(State.selectedPlan));
+      if (fullAccessNotice) fullAccessNotice.classList.add('hidden');
+    }
   },
 
   copy(text, id) {
@@ -118,7 +164,7 @@ export const Subscription = {
 
   updateSubmitBtn() {
     const val = $('tx-ref').value.trim();
-    $('sub-submit-btn').disabled = !val;
+    $('sub-submit-btn').disabled = !val || this.eligiblePlans().length === 0;
   },
 
   async submit() {

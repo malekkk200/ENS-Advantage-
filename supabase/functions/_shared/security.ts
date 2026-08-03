@@ -74,6 +74,18 @@ export async function verifyFileSignature(file: File, claimedMime: string): Prom
     case "image/gif":
       // "GIF87a" or "GIF89a"
       return hex.startsWith("474946383761") || hex.startsWith("474946383961");
+    case "image/png":
+      // 89 50 4E 47 0D 0A 1A 0A
+      return hex.startsWith("89504e470d0a1a0a");
+    case "image/jpeg":
+      // FF D8 FF
+      return hex.startsWith("ffd8ff");
+    case "image/webp": {
+      // "RIFF" .... "WEBP" — bytes 0-3 and 8-11
+      const riff = hex.slice(0, 8) === "52494646";
+      const webp = hex.slice(16, 24) === "57454250";
+      return riff && webp;
+    }
     case "video/webm":
       // EBML header
       return hex.startsWith("1a45dfa3");
