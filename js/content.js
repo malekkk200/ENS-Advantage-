@@ -27,8 +27,11 @@ export const Content = {
     const mod = modules.find(m => m.name === modName);
     if (!mod) return;
 
-    // Gate premium content before any network call
-    if (type !== 'summary' && !hasPrem) {
+    // Gate premium content before any network call — the Comprehensive
+    // Guide is free to any signed-in student (matches the guides RLS
+    // policy, which no longer checks has_s1_access/has_s2_access), so
+    // only 'fullLesson' actually needs premium access here.
+    if (type !== 'summary' && type !== 'guide' && !hasPrem) {
       Subscription.open(State.activeSemester);
       return;
     }
@@ -198,14 +201,17 @@ export const Content = {
     const body = $('cv-body');
     body.classList.remove('blurred');
 
-    // Watermark for premium HTML content
+    // Watermark only for content that's actually paywalled (fullLesson).
+    // The Comprehensive Guide is free, so no watermark — but it's still
+    // "premium-grade" original content, so keep the same anti-screenshot
+    // blur-on-tab-switch protection summaries don't get.
     const wmLayer = $('cv-watermark');
-    if (type !== 'summary') {
+    if (type === 'fullLesson') {
       paintWatermark(wmLayer, { className: 'watermark-text' });
-      State.contentViewerActive = true;
     } else {
       wmLayer.innerHTML = '';
     }
+    State.contentViewerActive = (type !== 'summary');
     $('content-overlay').classList.remove('hidden');
     lockBodyScroll();
     BackNav.push(() => this.close());

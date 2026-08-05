@@ -7,6 +7,7 @@ import { $ } from './dom.js';
 import { UI } from './ui.js';
 import { Modules } from './modules.js';
 import { Community } from './community.js';
+import { Subscription } from './subscription.js';
 
 /* ─────────────────────────────────────────────────────────────
    REALTIME — admin-approved premium updates pushed live
@@ -27,6 +28,12 @@ export const Realtime = {
         Community.updateNote();
         if (payload.new.has_s1_access && !payload.old.has_s1_access) this.showPremiumToast('S1');
         if (payload.new.has_s2_access && !payload.old.has_s2_access) this.showPremiumToast('S2');
+
+        // If the subscription modal happens to be open right now, refresh
+        // it immediately — e.g. the "Both Semesters" card (or the one
+        // semester just approved) needs to disappear without the student
+        // having to close and reopen the modal themselves.
+        if (State.subModalOpen) Subscription.updatePlanUI();
       })
       .subscribe();
   },

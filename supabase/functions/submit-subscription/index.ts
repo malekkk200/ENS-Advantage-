@@ -64,38 +64,36 @@ serve(async (req) => {
 
     const full_name = String(body.full_name ?? "").trim().slice(0, 200);
 
-    // 3b. Re-check the user's ALREADY-GRANTED access (source of truth,
-    //     set by the admin approving a previous request) — never trust
-    //     anything the client claims here. Once a semester is approved:
-    //       • that same semester can't be bought again
-    //       • "BOTH" can't be bought anymore either (it would just be
-    //         re-selling something already partially owned) — only the
-    //         other, still-missing semester remains purchasable.
+    // 3.5. Enforce access rules: once a semester is approved, that
+    // semester can't be bought again, and "BOTH" becomes unavailable —
+    // only the remaining (not-yet-approved) semester can still be
+    // purchased. This is re-derived here from user_profiles (the same
+    // source of truth the admin edits when approving a request) rather
+    // than trusted from the client.
     const { data: profile, error: profileErr } = await supabaseAdmin
       .from("user_profiles")
       .select("has_s1_access, has_s2_access")
       .eq("id", user.id)
-      .maybeSingle();
+      .single();
 
-    if (profileErr) {
-      console.error("profile lookup error:", profileErr);
-      return json({ error: "Failed to verify current subscription status." }, 500);
+    if (profileErr || !profile) {
+      return json({ error: "Could not verify your account access. Please try again." }, 500);
     }
 
-    const hasS1 = !!profile?.has_s1_access;
-    const hasS2 = !!profile?.has_s2_access;
+    const { has_s1_access, has_s2_access } = profile;
 
-    if (hasS1 && hasS2) {
-      return json({ error: "You already have full access to both semesters." }, 409);
+    if (has_s1_access && has_s2_access) {
+      return json({ error: "You already have access to both semesters." }, 409);
     }
-    if (plan === "BOTH" && (hasS1 || hasS2)) {
-      return json({ error: `You already have Semester ${hasS1 ? "1" : "2"} — you can only subscribe to Semester ${hasS1 ? "2" : "1"} now.` }, 409);
-    }
-    if (plan === "S1" && hasS1) {
+    if (plan === "S1" && has_s1_access) {
       return json({ error: "You already have access to Semester 1." }, 409);
     }
-    if (plan === "S2" && hasS2) {
+    if (plan === "S2" && has_s2_access) {
       return json({ error: "You already have access to Semester 2." }, 409);
+    }
+    if (plan === "BOTH" && (has_s1_access || has_s2_access)) {
+      const remaining = has_s1_access ? "Semester 2" : "Semester 1";
+      return json({ error: `You already have access to one semester — you can only subscribe to ${remaining} now.` }, 409);
     }
 
     // 4. Pricing + new-student 40% discount — determined server-side only.

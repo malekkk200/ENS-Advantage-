@@ -118,13 +118,13 @@ export const Modules = {
         <div class="content-section-title">🎯 Guide</div>
         <div class="content-item" data-action="open-content" data-mod="${name}" data-type="guide" data-prem="${hasPrem}">
           <div class="content-item-left">
-            <div class="content-icon ${hasPrem ? 'guide' : 'locked'}">${hasPrem ? '🎯' : '🔒'}</div>
+            <div class="content-icon guide">🎯</div>
             <div>
-              <div class="content-name" style="color:${hasPrem ? 'var(--slate-900)' : 'var(--slate-500)'};">Comprehensive Guide</div>
-              <div class="content-tag ${hasPrem ? 'unlocked-tag' : 'premium-tag'}">${hasPrem ? '✓ Unlocked' : '⚡ Premium Only'}</div>
+              <div class="content-name">Comprehensive Guide</div>
+              <div class="content-tag free-tag">✓ Free Access</div>
             </div>
           </div>
-          <span style="font-size:.8rem;color:var(--slate-400);">${hasPrem ? '→' : '🔒'}</span>
+          <span style="font-size:.8rem;color:var(--slate-400);">→</span>
         </div>
         ${listeningNote}
       </div>`;

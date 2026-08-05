@@ -654,6 +654,14 @@
           <div class="admin-file-drop-text" id="admin-guide-images-text">اضغط لاختيار صورة أو أكثر</div>
         </div>
         <div id="admin-guide-images-preview" style="display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.6rem;"></div>
+
+        <label style="display:flex;align-items:center;gap:.5rem;margin-top:.9rem;font-size:.85rem;color:var(--slate-500,#64748b);cursor:pointer;">
+          <input type="checkbox" id="admin-guide-replace-mode" style="width:auto;">
+          استبدال المحتوى الحالي بالكامل بدلاً من الإضافة إليه
+        </label>
+        <div style="font-size:.75rem;color:var(--slate-400,#94a3b8);margin-top:.25rem;">
+          الوضع الافتراضي: إضافة النص والصور الجديدة أسفل ما تم رفعه سابقاً لهذه المادة (دون حذفه).
+        </div>
       </div>
 
       <button class="admin-submit-btn" id="admin-submit-btn" onclick="App.AdminPanel.upload()">

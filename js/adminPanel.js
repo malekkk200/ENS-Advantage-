@@ -79,6 +79,7 @@ export const AdminPanel = {
     $('admin-guide-images-input').value = '';
     $('admin-guide-images-preview').innerHTML = '';
     $('admin-guide-images-text').textContent = 'اضغط لاختيار صورة أو أكثر';
+    $('admin-guide-replace-mode').checked = false;
     this._setStatus(null);
     this.onCategoryChange();
   },
@@ -264,16 +265,16 @@ export const AdminPanel = {
   /**
    * Text + images path for the Comprehensive Guide. Unlike PDF uploads,
    * this always opens in the plain HTML content window (never the PDF
-   * viewer) — the text becomes the guide's body and any images are
-   * appended below it. Replaces whatever guide content existed before
-   * for this module/semester (one guide per module/semester, same as
-   * the previous PDF-based guide slot).
+   * viewer) — the text becomes paragraphs and any images are appended
+   * below them. By default this ADDS to whatever guide content already
+   * exists for this module/semester (so images can be added below text
+   * uploaded earlier); the "replace" checkbox overwrites it instead.
    */
   async _uploadGuide() {
     const semester   = parseInt($('admin-semester').value, 10);
     const moduleName = $('admin-module').value;
-    const title      = $('admin-title').value.trim();
     const text       = $('admin-guide-text').value.trim();
+    const mode       = $('admin-guide-replace-mode').checked ? 'replace' : 'append';
 
     if (!moduleName) { this._setStatus('error', 'الرجاء اختيار مادة'); return; }
     if (!text && this._selectedGuideImages.length === 0) {
@@ -289,11 +290,11 @@ export const AdminPanel = {
       const form = new FormData();
       form.append('semester', String(semester));
       form.append('module_name', moduleName);
-      form.append('content_text', text);
-      if (title) form.append('title', title);
-      this._selectedGuideImages.forEach((file, i) => form.append(`image_${i}`, file));
+      form.append('text', text);
+      form.append('mode', mode);
+      this._selectedGuideImages.forEach((file) => form.append('images', file));
 
-      const { ok, json } = await Supabase.callFunctionMultipart('admin-upload-guide', form);
+      const { ok, json } = await Supabase.callFunctionMultipart('admin-upsert-guide', form);
 
       if (!ok || json?.error) {
         this._setStatus('error', json?.error || 'فشل الرفع. حاول مجدداً.');
@@ -301,12 +302,14 @@ export const AdminPanel = {
         return;
       }
 
-      this._setStatus('success', '✅ تم حفظ الدليل الشامل بنجاح! يفتح الآن كنافذة للطلاب.');
+      const modeMsg = mode === 'replace' ? 'تم استبدال محتوى الدليل بنجاح!' : 'تمت إضافة المحتوى الجديد إلى الدليل بنجاح!';
+      this._setStatus('success', `✅ ${modeMsg} يفتح الآن كنافذة مجانية لجميع الطلاب.`);
       $('admin-guide-text').value = '';
       this._selectedGuideImages = [];
       $('admin-guide-images-input').value = '';
       $('admin-guide-images-preview').innerHTML = '';
       $('admin-guide-images-text').textContent = 'اضغط لاختيار صورة أو أكثر';
+      $('admin-guide-replace-mode').checked = false;
 
     } catch (err) {
       console.error('[AdminPanel._uploadGuide]', err);
