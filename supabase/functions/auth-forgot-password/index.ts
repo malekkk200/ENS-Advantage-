@@ -69,6 +69,26 @@ If you did not request this, please ignore this email — your password will not
 ---
 ENS ADVANTAGE | École Normale Supérieure | English Department`;
 
+// listUsers() only returns one page (max 1000) per call with no
+// server-side email filter — past 1000 total accounts, a single call
+// can silently miss a real user. This walks pages until found or
+// exhausted, same fix as auth-signup / auth-verify-otp.
+async function findUserByEmail(
+  sb: ReturnType<typeof createClient>,
+  emailLower: string,
+) {
+  let page = 1;
+  const perPage = 1000;
+  for (;;) {
+    const { data, error } = await sb.auth.admin.listUsers({ page, perPage });
+    if (error) return { user: undefined, error };
+    const found = data?.users?.find((u) => u.email === emailLower);
+    if (found) return { user: found, error: null };
+    if (!data?.users || data.users.length < perPage) return { user: undefined, error: null };
+    page++;
+  }
+}
+
 // ─── Main handler ─────────────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
@@ -94,8 +114,9 @@ Deno.serve(async (req) => {
     // ── SEND reset code ─────────────────────────────────────────────────────────────
     if (action === 'send') {
       // Verify the account exists (don't reveal this in the response — always say success)
-      const { data: { users } } = await sb.auth.admin.listUsers({ perPage: 1000 });
-      const userExists = users?.some((u) => u.email === emailLower);
+      const { user: existingUser, error: findErr } = await findUserByEmail(sb, emailLower);
+      if (findErr) console.error('listUsers failed:', findErr.message);
+      const userExists = !!existingUser;
       // We still return success even if the account doesn't exist (security)
 
       if (userExists) {
@@ -207,8 +228,8 @@ Deno.serve(async (req) => {
       await sb.from('otp_codes').update({ used: true }).eq('id', otpRow.id);
 
       // Find user
-      const { data: { users } } = await sb.auth.admin.listUsers({ perPage: 1000 });
-      const user = users?.find((u) => u.email === emailLower);
+      const { user, error: findErr } = await findUserByEmail(sb, emailLower);
+      if (findErr) console.error('listUsers failed:', findErr.message);
       if (!user) return json({ error: 'Account not found.' }, 404);
 
       // Update password

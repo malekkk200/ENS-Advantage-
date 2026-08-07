@@ -62,7 +62,15 @@ export const Protection = {
     window.addEventListener('blur', this._onBlur);
     window.addEventListener('focus', this._onFocus);
     document.addEventListener('visibilitychange', this._onVisibilityChange);
-    State.devToolsInterval = setInterval(this._checkDevTools, 1200);
+    // Guard against a leaked interval if activate() is ever called twice
+    // in a row without an intervening deactivate() — e.g. Supabase can
+    // emit a second 'SIGNED_IN' event for an already-active session on
+    // page load, which calls showMainApp() → activate() again. Without
+    // this check, State.devToolsInterval would just get overwritten and
+    // the previous setInterval would keep running forever, uncleared.
+    if (!State.devToolsInterval) {
+      State.devToolsInterval = setInterval(this._checkDevTools, 1200);
+    }
   },
 
   deactivate() {

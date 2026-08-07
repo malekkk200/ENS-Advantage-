@@ -209,8 +209,8 @@ export const MemeAdmin = {
         return;
       }
 
-      this._setStatus('success', '✅ تم رفع الميم بنجاح!');
       this._resetUploadForm();
+      this._setStatus('success', '✅ تم رفع الميم بنجاح!');
 
       if (json.meme) {
         // Prepend to local list and switch to that category tab

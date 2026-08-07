@@ -11,6 +11,9 @@ import { UI } from './ui.js';
 import { Content } from './content.js';
 import { PDFViewer } from './pdfViewer.js';
 import { Protection } from './protection.js';
+import { Subscription } from './subscription.js';
+import { AdminPanel } from './adminPanel.js';
+import { MemeAdmin } from './memeAdmin.js';
 import { render } from './router.js';
 
 /* ─────────────────────────────────────────────────────────────
@@ -336,9 +339,16 @@ export const Auth = {
   async logout() {
     Realtime.teardown();
     await Sessions.releaseOnLogout();
-    // Close any open viewers before signing out
+    // Close every overlay before signing out — otherwise, if one
+    // happened to be open (PDF/content viewer, subscription modal, or
+    // either admin panel), it stayed visibly open floating over the
+    // freshly-rendered login screen, since render()/showAuthLogin()
+    // never touch these overlay elements themselves.
     PDFViewer.close();
     Content.close();
+    Subscription.close();
+    AdminPanel.close();
+    MemeAdmin.close();
     await sb.auth.signOut();
     State.currentUser         = null;
     State.currentProfile      = null;

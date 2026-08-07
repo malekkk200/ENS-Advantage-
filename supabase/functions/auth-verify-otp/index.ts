@@ -84,8 +84,18 @@ Deno.serve(async (req) => {
     // (see auth-signup), the new password only gets applied now — after
     // the code for this exact email has been proven correct.
     if (data.pending_password) {
-      const { data: userList } = await sb.auth.admin.listUsers({ perPage: 1000 });
-      const user = userList?.users?.find((u) => u.email === emailLower);
+      // listUsers() only returns one page (max 1000) per call with no
+      // server-side email filter — walk pages until found or exhausted
+      // so this doesn't silently miss a real user past the first 1000.
+      let user: { id: string } | undefined;
+      let page = 1;
+      for (;;) {
+        const { data: pageData, error: pageErr } = await sb.auth.admin.listUsers({ page, perPage: 1000 });
+        if (pageErr) { console.error('listUsers failed:', pageErr.message); break; }
+        user = pageData?.users?.find((u) => u.email === emailLower);
+        if (user || !pageData?.users || pageData.users.length < 1000) break;
+        page++;
+      }
       if (user) {
         const { error: pwErr } = await sb.auth.admin.updateUserById(user.id, {
           password: data.pending_password,

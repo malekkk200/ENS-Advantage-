@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════════════════
    GRADE CALCULATOR
 ═══════════════════════════════════════════════════════════════ */
-import { $ } from './dom.js';
+import { $, escHtml } from './dom.js';
 import { State } from './state.js';
 import { Curriculum } from './curriculum.js';
 import { MemeSystem } from './memeSystem.js';
@@ -25,7 +25,7 @@ export const Calc = {
       html += `
       <div class="calc-container">
         <div class="calc-ue-header">
-          <span>${ue.code}</span>
+          <span>${escHtml(ue.code)}</span>
           <span class="calc-ue-avg-badge" id="calc-ue-badge-${sem}-${ueIdx}">&mdash; / 20</span>
         </div>
         <table class="calc-table">
@@ -45,7 +45,7 @@ export const Calc = {
         const tdStyle = mod.rtl ? ' style="direction:rtl;font-family:\'Cairo\',sans-serif;"' : '';
         html += `
             <tr>
-              <td${tdStyle}>${mod.name}</td>
+              <td${tdStyle}>${escHtml(mod.name)}</td>
               <td style="text-align:center;font-weight:600;color:var(--slate-500);">${mod.coef}</td>
               <td style="text-align:center;">
                 <input class="calc-input" type="number" id="calc-td-${uid}" data-action="calc-input" data-sem="${sem}"
@@ -235,13 +235,13 @@ export const Calc = {
       } else {
         let html = `<div class="note-heading">🎯 ماذا تحتاج للنجاح:</div>`;
         if (mandatoryRetake.length) {
-          html += `<div class="note-line note-bad">🔴 <strong>يجب عليك اجتياز الاستدراك</strong> في: ${mandatoryRetake.join('، ')} — معدلك فيها أقل من 5 (نقطة إقصائية، نجاح بدين).</div>`;
+          html += `<div class="note-line note-bad">🔴 <strong>يجب عليك اجتياز الاستدراك</strong> في: ${mandatoryRetake.map(escHtml).join('، ')} — معدلك فيها أقل من 5 (نقطة إقصائية، نجاح بدين).</div>`;
         }
         if (optionalRetake.length) {
-          html += `<div class="note-line note-warn">🟡 <strong>يمكنك تحسين معدلك</strong> باستدراك اختياري في: ${optionalRetake.join('، ')} (معدلك بين 5 و10).</div>`;
+          html += `<div class="note-line note-warn">🟡 <strong>يمكنك تحسين معدلك</strong> باستدراك اختياري في: ${optionalRetake.map(escHtml).join('، ')} (معدلك بين 5 و10).</div>`;
         }
         if (weakUEs.length) {
-          html += `<div class="note-line note-bad">⚠️ معدل الوحدة أقل من 8 في: ${weakUEs.join('، ')} — الاستدراك مطلوب لرفعه فوق 8.</div>`;
+          html += `<div class="note-line note-bad">⚠️ معدل الوحدة أقل من 8 في: ${weakUEs.map(escHtml).join('، ')} — الاستدراك مطلوب لرفعه فوق 8.</div>`;
         }
         officialNoteEl.innerHTML = html;
         officialNoteEl.className = 'calc-official-note has-notes state-bad';

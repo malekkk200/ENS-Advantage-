@@ -69,6 +69,11 @@ export const PDFViewer = (() => {
   let _scrollRaf   = null;   // rAF handle for the throttled scroll handler
   let _saveTimer   = null;   // debounce handle for progress-saving while scrolling
   let _programmaticScroll = false; // true while we're scrolling the zone ourselves (goto/resume)
+  let _openToken   = 0;      // bumped on every open() call — lets a stale, still-in-flight
+                              // open() (e.g. user closed and reopened a different lesson
+                              // before the first one's network calls finished) detect that
+                              // it's no longer the current request and stop before it can
+                              // clobber the newer one's state/UI.
   const ZOOM_STEPS = [0.5, 0.6, 0.75, 0.9, 1.0, 1.15, 1.3, 1.5, 1.75, 2.0];
   const RENDER_MARGIN = '1200px 0px'; // preload ~1.5 screens above/below the viewport
 
@@ -367,6 +372,11 @@ export const PDFViewer = (() => {
      * @param {object} material  { id, title, storagePath } — one entry from CourseMaterials.getAll()
      */
     async open(mod, type, material) {
+      // Bump the request generation immediately — anything from an
+      // older, still-in-flight open() call checks this and bails out
+      // rather than overwriting a newer open() that's already showing.
+      const myToken = ++_openToken;
+
       // Set type label in toolbar
       const typeLabels = {
         summary:    'Free Summary',
@@ -407,7 +417,7 @@ export const PDFViewer = (() => {
       window.addEventListener('focus', _onWindowFocus);
       document.addEventListener('visibilitychange', _onVisibilityChange);
       _el('pdf-canvas-zone').addEventListener('scroll', _onScroll, { passive: true });
-      _devToolsTimer = setInterval(_checkDevTools, 1200);
+      if (!_devToolsTimer) _devToolsTimer = setInterval(_checkDevTools, 1200);
 
       // ── 1. Generate a short-lived signed URL (90 seconds) ──
       // Storage RLS is evaluated here: if the user doesn't have
@@ -419,6 +429,8 @@ export const PDFViewer = (() => {
           .from('course-materials')
           .createSignedUrl(material.storagePath, 90); // 90-second TTL
 
+        if (myToken !== _openToken) return; // superseded by a newer open() while awaiting
+
         if (error || !data?.signedUrl) {
           console.error('[PDFViewer] createSignedUrl error:', error?.message);
           _setError('Access denied or content unavailable. Please verify your subscription.');
@@ -426,6 +438,7 @@ export const PDFViewer = (() => {
         }
         signedUrl = data.signedUrl;
       } catch (err) {
+        if (myToken !== _openToken) return; // superseded by a newer open() while awaiting
         console.error('[PDFViewer] Network error during signed URL generation:', err);
         _setError('Network error. Please check your connection and try again.');
         return;
@@ -454,12 +467,17 @@ export const PDFViewer = (() => {
         });
 
         _pdfDoc     = await loadingTask.promise;
+        if (myToken !== _openToken) { // superseded while awaiting — don't touch the newer viewer's state
+          try { await _pdfDoc.destroy(); } catch (_) {}
+          return;
+        }
         _totalPages = _pdfDoc.numPages;
 
         // Build every page's wrapper/canvas/watermark up front (sized
         // correctly from real dimensions) and start the lazy-render
         // observer — this is what makes the continuous scroll work.
         await _buildPages();
+        if (myToken !== _openToken) return; // superseded mid-build
 
         _showState('pages');
         _updatePagePill();
@@ -469,6 +487,7 @@ export const PDFViewer = (() => {
         _scrollToPage(startPage);
 
       } catch (err) {
+        if (myToken !== _openToken) return; // superseded — the newer open() owns error reporting now
         console.error('[PDFViewer] PDF.js load error:', err);
         if (err?.name === 'InvalidPDFException') {
           _setError('Invalid or corrupted document. Please contact support.');
@@ -481,6 +500,11 @@ export const PDFViewer = (() => {
     },
 
     close() {
+      // Invalidate any open() call still in flight (e.g. the user closed
+      // before its network/PDF.js work finished) so it stops before
+      // touching state or UI that no longer belongs to it.
+      _openToken++;
+
       BackNav.notifyClose();
       _el('pdf-overlay').classList.add('hidden');
       unlockBodyScroll();

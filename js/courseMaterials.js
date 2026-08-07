@@ -35,7 +35,14 @@ export const CourseMaterials = {
       const { data, error } = await sb
         .from('course_materials')
         .select('id, semester, module_name, category, title, storage_path')
-        .order('sort_order', { ascending: true });
+        // sort_order is the primary "oldest -> newest" ordering, but it
+        // can collide (e.g. two rows end up with the same sort_order
+        // after a delete leaves a gap that a later upload's COUNT-based
+        // number happens to reoccupy) — Postgres doesn't guarantee any
+        // particular order among ties, so created_at as a secondary key
+        // keeps oldest -> newest reliable even when that happens.
+        .order('sort_order', { ascending: true })
+        .order('created_at', { ascending: true });
 
       if (error) {
         console.error('[CourseMaterials.load] DB error:', error.message);

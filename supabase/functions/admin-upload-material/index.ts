@@ -219,18 +219,29 @@ Deno.serve(async (req) => {
       }
     }
 
-    const { count: existingCount } = await adminClient
+    // next sort_order = current MAX + 1, not COUNT — COUNT collides
+    // with an existing sort_order once anything in this slot has ever
+    // been deleted (e.g. 3 uploads numbered 0/1/2, #1 deleted → COUNT
+    // is 2, which is already taken by the surviving row, so two rows
+    // would tie on sort_order and "oldest -> newest" would no longer
+    // be well-defined for them).
+    const { data: maxRow } = await adminClient
       .from("course_materials")
-      .select("id", { count: "exact", head: true })
+      .select("sort_order")
       .eq("semester", semester)
       .eq("module_name", moduleName)
-      .eq("category", category);
+      .eq("category", category)
+      .order("sort_order", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const nextSortOrder = (maxRow?.sort_order ?? -1) + 1;
 
     const { data: row, error: dbErr } = await adminClient
       .from("course_materials")
       .insert({
         semester, module_name: moduleName, category, title,
-        storage_path: storagePath, sort_order: existingCount ?? 0,
+        storage_path: storagePath, sort_order: nextSortOrder,
       })
       .select()
       .single();

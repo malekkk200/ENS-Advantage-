@@ -68,6 +68,29 @@ If you did not request this, please ignore this email.
 ENS ADVANTAGE | École Normale Supérieure | English Department
 This is an automated transactional email. Please do not reply.`;
 
+// listUsers() is paginated (1000/page max) and has no server-side email
+// filter, so a single call only ever sees the first page — once the
+// user base passes 1000 accounts, an existing user past that point
+// would look "new" here and hit createUser() again (which at least
+// fails loudly rather than corrupting anything, but breaks signup/
+// resend for them regardless). This walks every page until the email
+// is found or the pages run out.
+async function findUserByEmail(
+  sb: ReturnType<typeof createClient>,
+  emailLower: string,
+) {
+  let page = 1;
+  const perPage = 1000;
+  for (;;) {
+    const { data, error } = await sb.auth.admin.listUsers({ page, perPage });
+    if (error) return { user: undefined, error };
+    const found = data?.users?.find((u) => u.email === emailLower);
+    if (found) return { user: found, error: null };
+    if (!data?.users || data.users.length < perPage) return { user: undefined, error: null };
+    page++;
+  }
+}
+
 // ─── Shared OTP send helper ───────────────────────────────────────────────────
 // pendingPassword: if set, the password is NOT applied to the auth account yet.
 // It's stored alongside the OTP row and only applied by auth-verify-otp once
@@ -175,8 +198,11 @@ Deno.serve(async (req) => {
       if (!emailRe.test(emailLower)) return json({ error: 'Invalid email address' }, 400);
 
       // Verify the user actually exists before resending
-      const { data: existingList } = await sb.auth.admin.listUsers({ perPage: 1000 });
-      const existingUser = existingList?.users?.find((u) => u.email === emailLower);
+      const { user: existingUser, error: findErr } = await findUserByEmail(sb, emailLower);
+      if (findErr) {
+        console.error('listUsers failed:', findErr.message);
+        return json({ error: 'Could not verify account status. Please try again.' }, 500);
+      }
       if (!existingUser) {
         return json({ error: 'No account found for this email. Please sign up first.' }, 404);
       }
@@ -196,12 +222,11 @@ Deno.serve(async (req) => {
     if (!emailRe.test(emailLower)) return json({ error: 'Invalid email address' }, 400);
     if (password.length < 8) return json({ error: 'Password must be at least 8 characters' }, 400);
 
-    const { data: existingList, error: listErr } = await sb.auth.admin.listUsers({ perPage: 1000 });
+    const { user: existingUser, error: listErr } = await findUserByEmail(sb, emailLower);
     if (listErr) {
       console.error('listUsers failed:', listErr.message);
       return json({ error: 'Could not verify account status. Please try again.' }, 500);
     }
-    const existingUser = existingList?.users?.find((u) => u.email === emailLower);
 
     if (!existingUser) {
       // Brand new account — safe to create immediately. The account is
