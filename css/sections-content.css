@@ -104,6 +104,32 @@
     user-select: none; pointer-events: none;
   }
   .viewer-content { position: relative; z-index: 2; }
+
+  /* Comprehensive Guide content (guide-images/text uploaded via the
+     admin panel) — Arabic-first with embedded English words/numbers.
+     Without an explicit RTL direction, the browser defaults to LTR:
+     paragraphs align to the wrong edge and mixed Arabic/English lines
+     visually scramble instead of reading naturally. Scoped to
+     .guide-content only, not every .viewer-content use, since
+     summary/full-lesson HTML fallbacks may not be Arabic-only. */
+  .viewer-content.guide-content {
+    direction: rtl;
+    text-align: right;
+    font-family: 'Cairo', var(--font-sans, sans-serif);
+  }
+  .viewer-content.guide-content p {
+    line-height: 1.9;
+    margin-bottom: 1rem;
+    unicode-bidi: plaintext; /* keeps a mostly-English paragraph left-to-right if one ever occurs, instead of forcing it backwards */
+  }
+  .viewer-content.guide-content img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 10px;
+    margin: 1rem 0;
+  }
+
   .mock-content h4 { font-size: 1.05rem; font-weight: 700; color: var(--slate-900); margin-bottom: 1rem; }
   .mock-content p { color: var(--slate-600); line-height: 1.8; margin-bottom: 1rem; font-size: .9rem; }
   .mock-content ul { list-style: disc; padding-left: 1.5rem; color: var(--slate-600); margin-bottom: 1rem; }

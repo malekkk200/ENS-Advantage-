@@ -61,11 +61,17 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
-/** Plain text -> safe paragraph HTML. Blank lines separate <p>s; single newlines become <br>. */
+/** Plain text -> safe paragraph HTML. Blank lines separate <p>s; single newlines become <br>.
+ * dir="rtl" is set explicitly: this platform's guide content is Arabic-first
+ * with embedded English words/numbers, and without an explicit direction the
+ * browser defaults to LTR, which misaligns Arabic paragraphs and scrambles
+ * the reading order of mixed Arabic/English lines. unicode-bidi:plaintext
+ * (applied via CSS on render, not inline here) still lets a rare English-only
+ * paragraph read left-to-right instead of being forced backwards. */
 function textToParagraphs(text: string): string {
   const blocks = text.replace(/\r\n/g, "\n").split(/\n{2,}/).map((b) => b.trim()).filter(Boolean);
   return blocks
-    .map((b) => `<p>${escapeHtml(b).replace(/\n/g, "<br>")}</p>`)
+    .map((b) => `<p dir="rtl">${escapeHtml(b).replace(/\n/g, "<br>")}</p>`)
     .join("\n");
 }
 
@@ -180,7 +186,7 @@ Deno.serve(async (req) => {
     // ── 5. Build the new HTML fragment ─────────────────────────────
     const paragraphHtml = text.trim() ? textToParagraphs(text) : "";
     const imagesHtml = uploadedUrls
-      .map((url) => `<img src="${url}" alt="" loading="lazy" style="max-width:100%;border-radius:10px;margin:.85rem 0;display:block;" />`)
+      .map((url) => `<img src="${url}" alt="" loading="lazy" style="display:block;width:100%;height:auto;border-radius:10px;margin:1rem 0;" />`)
       .join("\n");
     const newFragment = [paragraphHtml, imagesHtml].filter(Boolean).join("\n");
 

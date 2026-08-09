@@ -196,7 +196,14 @@ export const Content = {
     const typeLabels = { summary: 'Free Summary', fullLesson: 'Full Lesson', guide: 'Comprehensive Guide' };
     $('cv-title').textContent = mod.name;
     $('cv-subtitle').textContent = typeLabels[type] || '';
-    $('cv-content').innerHTML = DOMPurify.sanitize(htmlContent, { USE_PROFILES: { html: true } });
+    const contentEl = $('cv-content');
+    contentEl.innerHTML = DOMPurify.sanitize(htmlContent, { USE_PROFILES: { html: true } });
+    // Guides are Arabic-first with embedded English words/numbers — apply
+    // the RTL layout + full-width images CSS scoped to guide content only
+    // (see .viewer-content.guide-content in sections-content.css). Toggled
+    // rather than left on permanently since this same element is reused
+    // for summary/full-lesson HTML too.
+    contentEl.classList.toggle('guide-content', type === 'guide');
 
     const body = $('cv-body');
     body.classList.remove('blurred');
