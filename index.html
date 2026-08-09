@@ -394,7 +394,7 @@
 
     <div id="premium-notice" class="reveal" style="background:linear-gradient(135deg,#fef3c7 0%,#fde68a 100%);border:1px solid #f59e0b;border-radius:var(--radius-md);padding:.85rem 1.1rem;margin-bottom:1.25rem;display:flex;align-items:center;gap:.75rem;font-size:.875rem;color:#92400e;animation-delay: 0.3s;">
       <span style="font-size:1.1rem;">🔐</span>
-      <span><strong>Free access:</strong> Summaries are open. Full Lessons &amp; Guides require Semester <span id="notice-sem">1</span> Premium.</span>
+      <span><strong>Free access:</strong> Summaries and guides are open. Full Lessons require Semester <span id="notice-sem">1</span> Premium.</span>
       <button id="notice-unlock-btn" onclick="App.Subscription.open(1)" style="margin-left:auto;padding:.35rem .8rem;background:#f59e0b;color:white;border:none;border-radius:var(--radius-sm);font-weight:700;cursor:pointer;font-size:.8rem;white-space:nowrap;font-family:'Inter',sans-serif;">Unlock →</button>
     </div>
 
@@ -604,6 +604,7 @@
         <select class="form-select" id="admin-semester" onchange="App.AdminPanel.onSemesterChange()">
           <option value="1">الفصل الأول (S1)</option>
           <option value="2">الفصل الثاني (S2)</option>
+          <option value="both" id="admin-semester-both-option" class="hidden">كلا الفصلين (S1 + S2)</option>
         </select>
       </div>
 

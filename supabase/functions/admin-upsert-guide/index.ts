@@ -198,8 +198,17 @@ Deno.serve(async (req) => {
       .eq("semester", semester)
       .maybeSingle();
 
-    const finalHtml = (mode === "append" && existing?.content_html)
-      ? `${existing.content_html}\n${newFragment}`
+    // Old rows can still carry the original seed placeholder ("Guide
+    // content coming soon." / "المحتوى قريباً.") as their entire
+    // content_html. That placeholder isn't real prior content, so it
+    // must never be preserved by appending onto it — strip it before
+    // merging, otherwise every future append keeps re-surfacing it
+    // above the actual guide text.
+    const PLACEHOLDER_RE = /^<div class="mock-content"><h4>🎯[^<]*<\/h4><p><em>(Guide content coming soon\.|المحتوى قريباً\.)<\/em><\/p><\/div>\n?/;
+    const existingHtml = (existing?.content_html || "").replace(PLACEHOLDER_RE, "");
+
+    const finalHtml = (mode === "append" && existingHtml)
+      ? `${existingHtml}\n${newFragment}`
       : newFragment;
 
     const { data: row, error: dbErr } = await adminClient

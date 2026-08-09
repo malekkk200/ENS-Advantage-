@@ -51,8 +51,7 @@ export const AdminPanel = {
   open() {
     if (!_isAuthorizedAdmin()) return; // defence in depth
     UI.toggleDropdown(); // close the user dropdown menu
-    this._resetForm();
-    this.onSemesterChange();
+    this._resetForm(); // triggers onCategoryChange() -> onSemesterChange()
     $('admin-modal').classList.remove('hidden');
     BackNav.push(() => this.close());
   },
@@ -91,6 +90,17 @@ export const AdminPanel = {
     $('admin-pdf-fields').classList.toggle('hidden', isGuide);
     $('admin-guide-fields').classList.toggle('hidden', !isGuide);
     $('admin-submit-btn').textContent = isGuide ? 'رفع الدليل الآن' : 'رفع الملف الآن';
+
+    // "Both semesters" only makes sense for the Comprehensive Guide path
+    // (PDFs are genuinely semester-specific files). Only offer it there,
+    // and fall back to "Semester 1" if it was selected and the category
+    // changed away from guide underneath it.
+    const bothOption = $('admin-semester-both-option');
+    bothOption.classList.toggle('hidden', !isGuide);
+    if (!isGuide && $('admin-semester').value === 'both') {
+      $('admin-semester').value = '1';
+    }
+    this.onSemesterChange();
   },
 
   onGuideImagesSelected(e) {
@@ -150,13 +160,51 @@ export const AdminPanel = {
 
   /** Repopulate the module dropdown whenever the semester changes */
   onSemesterChange() {
-    const semester = parseInt($('admin-semester').value, 10);
-    const modules  = Curriculum.modulesFor(semester) || [];
+    const semesterVal = $('admin-semester').value;
     const sel = $('admin-module');
+
+    if (semesterVal === 'both') {
+      // Only list modules that actually have a same-subject counterpart
+      // in the other semester (matched by name minus its trailing "1"/"2",
+      // e.g. "Grammar 1" <-> "Grammar 2"). A couple of slots hold genuinely
+      // different subjects across semesters (e.g. ICT vs. Computer Science)
+      // and are deliberately excluded here — those must be uploaded per
+      // semester individually.
+      sel.innerHTML = this._pairedGuideModules().map(p =>
+        `<option value="${escHtml(p.base)}">${escHtml(p.base)}</option>`
+      ).join('');
+      $('admin-existing-list').innerHTML = '';
+      return;
+    }
+
+    const semester = parseInt(semesterVal, 10);
+    const modules  = Curriculum.modulesFor(semester) || [];
     sel.innerHTML = modules.map(m =>
       `<option value="${escHtml(m.name)}">${escHtml(m.name)}</option>`
     ).join('');
     this._renderExistingList(semester);
+  },
+
+  /** Strips a trailing " 1" / " 2" (with any amount of leading whitespace) off a module name. */
+  _baseModuleName(name) {
+    return name.replace(/\s*[12]\s*$/, '').trim();
+  },
+
+  /**
+   * Modules present in both Curriculum.SEMESTER_1 and SEMESTER_2 that share
+   * the same subject (base name matches once the trailing semester digit is
+   * stripped). Returns { base, s1Name, s2Name } for each match.
+   */
+  _pairedGuideModules() {
+    const s1 = Curriculum.SEMESTER_1 || [];
+    const s2 = Curriculum.SEMESTER_2 || [];
+    const pairs = [];
+    s1.forEach(m1 => {
+      const base = this._baseModuleName(m1.name);
+      const m2 = s2.find(m => this._baseModuleName(m.name) === base);
+      if (m2) pairs.push({ base, s1Name: m1.name, s2Name: m2.name });
+    });
+    return pairs;
   },
 
   onFileSelected(e) {
@@ -271,10 +319,10 @@ export const AdminPanel = {
    * uploaded earlier); the "replace" checkbox overwrites it instead.
    */
   async _uploadGuide() {
-    const semester   = parseInt($('admin-semester').value, 10);
-    const moduleName = $('admin-module').value;
-    const text       = $('admin-guide-text').value.trim();
-    const mode       = $('admin-guide-replace-mode').checked ? 'replace' : 'append';
+    const semesterVal = $('admin-semester').value;
+    const moduleName  = $('admin-module').value;
+    const text        = $('admin-guide-text').value.trim();
+    const mode        = $('admin-guide-replace-mode').checked ? 'replace' : 'append';
 
     if (!moduleName) { this._setStatus('error', 'الرجاء اختيار مادة'); return; }
     if (!text && this._selectedGuideImages.length === 0) {
@@ -282,28 +330,43 @@ export const AdminPanel = {
       return;
     }
 
+    // "Both semesters" resolves the one base name shown in the dropdown
+    // back to each semester's real module name and submits twice — once
+    // per semester — with the exact same text/images/mode.
+    let targets; // [{ semester, moduleName }]
+    if (semesterVal === 'both') {
+      const pair = this._pairedGuideModules().find(p => p.base === moduleName);
+      if (!pair) { this._setStatus('error', 'تعذر إيجاد نظير هذه المادة في الفصل الآخر'); return; }
+      targets = [{ semester: 1, moduleName: pair.s1Name }, { semester: 2, moduleName: pair.s2Name }];
+    } else {
+      targets = [{ semester: parseInt(semesterVal, 10), moduleName }];
+    }
+
     const btn = $('admin-submit-btn');
     btn.disabled = true;
     this._setStatus('loading', this._selectedGuideImages.length ? 'جارٍ رفع الصور والنص…' : 'جارٍ الحفظ…');
 
     try {
-      const form = new FormData();
-      form.append('semester', String(semester));
-      form.append('module_name', moduleName);
-      form.append('text', text);
-      form.append('mode', mode);
-      this._selectedGuideImages.forEach((file) => form.append('images', file));
+      for (const target of targets) {
+        const form = new FormData();
+        form.append('semester', String(target.semester));
+        form.append('module_name', target.moduleName);
+        form.append('text', text);
+        form.append('mode', mode);
+        this._selectedGuideImages.forEach((file) => form.append('images', file));
 
-      const { ok, json } = await Supabase.callFunctionMultipart('admin-upsert-guide', form);
+        const { ok, json } = await Supabase.callFunctionMultipart('admin-upsert-guide', form);
 
-      if (!ok || json?.error) {
-        this._setStatus('error', json?.error || 'فشل الرفع. حاول مجدداً.');
-        btn.disabled = false;
-        return;
+        if (!ok || json?.error) {
+          this._setStatus('error', `${json?.error || 'فشل الرفع.'} (الفصل ${target.semester} — ${target.moduleName})`);
+          btn.disabled = false;
+          return;
+        }
       }
 
       const modeMsg = mode === 'replace' ? 'تم استبدال محتوى الدليل بنجاح!' : 'تمت إضافة المحتوى الجديد إلى الدليل بنجاح!';
-      this._setStatus('success', `✅ ${modeMsg} يفتح الآن كنافذة مجانية لجميع الطلاب.`);
+      const scopeMsg = targets.length > 1 ? ' (للفصلين معاً)' : '';
+      this._setStatus('success', `✅ ${modeMsg}${scopeMsg} يفتح الآن كنافذة مجانية لجميع الطلاب.`);
       $('admin-guide-text').value = '';
       this._selectedGuideImages = [];
       $('admin-guide-images-input').value = '';
