@@ -11,7 +11,9 @@
 //   semester      "1" | "2"                         (required)
 //   module_name   string, exact curriculum name      (required)
 //   text          plain text — becomes paragraphs    (optional)
-//   mode          "append" | "replace"                (default "append")
+//   mode          "append" | "replace" | "edit"       (default "append")
+//   keep_image_urls   JSON array of image URLs to keep (edit mode only;
+//                      each is re-validated against what's currently live)
 //   images        0+ image files (repeat the field)   (optional)
 //
 // Behavior:
@@ -28,7 +30,11 @@
 //   3. In "append" mode (the default — matches "add pictures BELOW
 //      the info I already uploaded"), the new fragment is appended to
 //      whatever content_html already exists for that module/semester.
-//      In "replace" mode the whole guide is overwritten.
+//      In "replace" mode the whole guide is overwritten. In "edit" mode
+//      the guide is rebuilt entirely from this request's text plus the
+//      validated keep_image_urls plus any newly uploaded images — used
+//      by the admin panel's "load existing content into the editor"
+//      flow, so a typo fix doesn't require re-uploading every image.
 //   4. Upserts the `guides` row (unique on module_name+semester). The
 //      table itself denies ALL client writes via RLS — only the
 //      service-role key used here can write it; students get free
@@ -124,8 +130,21 @@ Deno.serve(async (req) => {
     const moduleName  = (form.get("module_name") || "").toString().trim();
     const text        = (form.get("text") || "").toString();
     const modeRaw     = (form.get("mode") || "append").toString().trim().toLowerCase();
-    const mode        = modeRaw === "replace" ? "replace" : "append";
+    const mode        = (modeRaw === "replace" || modeRaw === "edit") ? modeRaw : "append";
     const imageFiles  = form.getAll("images").filter((f): f is File => f instanceof File && f.size > 0);
+
+    // "edit" mode rebuilds the guide from a plain-text draft + a curated
+    // set of which existing images to keep (validated below against what's
+    // actually live, so this can't be used to inject arbitrary URLs).
+    let keepImageUrls: string[] = [];
+    if (mode === "edit") {
+      try {
+        const parsed = JSON.parse((form.get("keep_image_urls") || "[]").toString());
+        if (Array.isArray(parsed)) keepImageUrls = parsed.filter((u): u is string => typeof u === "string");
+      } catch (_e) {
+        // Malformed input — treat as "keep nothing" rather than failing outright.
+      }
+    }
 
     const semester = parseInt(semesterRaw?.toString() || "", 10);
     if (semester !== 1 && semester !== 2) {
@@ -134,7 +153,11 @@ Deno.serve(async (req) => {
     if (!moduleName) {
       return jsonResponse(req, { error: "module_name is required" }, 400);
     }
-    if (!text.trim() && imageFiles.length === 0) {
+    // Append/replace still require something new to write. Edit mode is
+    // allowed through even with nothing "new" — the admin may just be
+    // dropping an image (kept list already covers that) or intentionally
+    // clearing the guide down to nothing.
+    if (mode !== "edit" && !text.trim() && imageFiles.length === 0) {
       return jsonResponse(req, { error: "Provide text and/or at least one image" }, 400);
     }
     if (imageFiles.length > MAX_IMAGES_PER_REQUEST) {
@@ -190,7 +213,8 @@ Deno.serve(async (req) => {
       .join("\n");
     const newFragment = [paragraphHtml, imagesHtml].filter(Boolean).join("\n");
 
-    // ── 6. Merge with existing content (append) or overwrite (replace) ──
+    // ── 6. Merge with existing content (append), overwrite (replace),
+    //      or rebuild from a curated draft (edit) ─────────────────────
     const { data: existing } = await adminClient
       .from("guides")
       .select("id, content_html")
@@ -198,18 +222,30 @@ Deno.serve(async (req) => {
       .eq("semester", semester)
       .maybeSingle();
 
-    // Old rows can still carry the original seed placeholder ("Guide
-    // content coming soon." / "المحتوى قريباً.") as their entire
-    // content_html. That placeholder isn't real prior content, so it
-    // must never be preserved by appending onto it — strip it before
-    // merging, otherwise every future append keeps re-surfacing it
-    // above the actual guide text.
-    const PLACEHOLDER_RE = /^<div class="mock-content"><h4>🎯[^<]*<\/h4><p><em>(Guide content coming soon\.|المحتوى قريباً\.)<\/em><\/p><\/div>\n?/;
-    const existingHtml = (existing?.content_html || "").replace(PLACEHOLDER_RE, "");
+    let finalHtml: string;
 
-    const finalHtml = (mode === "append" && existingHtml)
-      ? `${existingHtml}\n${newFragment}`
-      : newFragment;
+    if (mode === "edit") {
+      // Never trust the client's list of "images to keep" at face value —
+      // only keep URLs that actually appear in what's currently live for
+      // this exact module/semester. This is what stops "edit" mode from
+      // being used to splice an arbitrary external image URL into a guide.
+      const existingHtmlRaw = existing?.content_html || "";
+      const validatedKeepUrls = keepImageUrls.filter((u) => existingHtmlRaw.includes(u));
+      const keptImagesHtml = validatedKeepUrls
+        .map((url) => `<img src="${url}" alt="" loading="lazy" style="display:block;width:100%;height:auto;border-radius:10px;margin:1rem 0;" />`)
+        .join("\n");
+      finalHtml = [paragraphHtml, keptImagesHtml, imagesHtml].filter(Boolean).join("\n");
+    } else {
+      // Old rows can still carry the original seed placeholder ("Guide
+      // content coming soon." / "المحتوى قريباً.") as their entire
+      // content_html. That placeholder isn't real prior content, so it
+      // must never be preserved by appending onto it — strip it before
+      // merging, otherwise every future append keeps re-surfacing it
+      // above the actual guide text.
+      const PLACEHOLDER_RE = /^<div class="mock-content"><h4>🎯[^<]*<\/h4><p><em>(Guide content coming soon\.|المحتوى قريباً\.)<\/em><\/p><\/div>\n?/;
+      const existingHtml = (existing?.content_html || "").replace(PLACEHOLDER_RE, "");
+      finalHtml = (mode === "append" && existingHtml) ? `${existingHtml}\n${newFragment}` : newFragment;
+    }
 
     const { data: row, error: dbErr } = await adminClient
       .from("guides")

@@ -39,6 +39,8 @@ const GUIDE_IMAGE_MIME = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 export const AdminPanel = {
   _selectedFile: null,
   _selectedGuideImages: [], // File[] for the guide text+images upload path
+  _keptExistingImageUrls: [], // string[] existing image URLs kept when editing (edit mode only)
+  _currentGuideHtml: '', // raw content_html currently live for the selected module/semester
 
   /** Show the admin button only for the one authorized account */
   refreshVisibility() {
@@ -68,6 +70,8 @@ export const AdminPanel = {
   _resetForm() {
     this._selectedFile = null;
     this._selectedGuideImages = [];
+    this._keptExistingImageUrls = [];
+    this._currentGuideHtml = '';
     $('admin-title').value = '';
     $('admin-category').value = 'summary';
     $('admin-file-input').value = '';
@@ -78,7 +82,8 @@ export const AdminPanel = {
     $('admin-guide-images-input').value = '';
     $('admin-guide-images-preview').innerHTML = '';
     $('admin-guide-images-text').textContent = 'اضغط لاختيار صورة أو أكثر';
-    $('admin-guide-replace-mode').checked = false;
+    $('admin-guide-mode-append').checked = true;
+    $('admin-guide-current').classList.add('hidden');
     this._setStatus(null);
     this.onCategoryChange();
   },
@@ -101,6 +106,153 @@ export const AdminPanel = {
       $('admin-semester').value = '1';
     }
     this.onSemesterChange();
+  },
+
+  /** Whenever the module (or semester/category) changes, the "current content"
+   *  panel and any in-progress edit state are no longer valid for the new
+   *  selection — clear the draft and re-check what's already live. */
+  onModuleChange() {
+    this._keptExistingImageUrls = [];
+    this._currentGuideHtml = '';
+    $('admin-guide-mode-append').checked = true;
+    $('admin-guide-text').value = '';
+    this._selectedGuideImages = [];
+    $('admin-guide-images-input').value = '';
+    $('admin-guide-images-text').textContent = 'اضغط لاختيار صورة أو أكثر';
+    this._renderGuideImagePreviews();
+    this._refreshCurrentGuidePanel();
+  },
+
+  /** Strips HTML down to plain text (paragraphs separated by a blank line,
+   *  <br> -> newline) so existing guide content can be loaded back into the
+   *  plain-text editor. Runs on already-DB-stored content, but still routed
+   *  through DOMPurify before touching innerHTML — same discipline as the
+   *  student-facing render path. */
+  _extractGuideText(html) {
+    if (!html) return '';
+    const div = document.createElement('div');
+    div.innerHTML = DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
+    const paragraphs = Array.from(div.querySelectorAll('p')).map((p) => {
+      p.querySelectorAll('br').forEach((br) => br.replaceWith('\n'));
+      return p.textContent.trim();
+    }).filter(Boolean);
+    return paragraphs.join('\n\n');
+  },
+
+  /** Pulls out every <img src> already embedded in a guide's content_html. */
+  _extractGuideImageUrls(html) {
+    if (!html) return [];
+    const div = document.createElement('div');
+    div.innerHTML = DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
+    return Array.from(div.querySelectorAll('img')).map((img) => img.getAttribute('src')).filter(Boolean);
+  },
+
+  /** Fetches + displays what's currently live for the selected module/semester.
+   *  Guides are free-read for everyone (RLS), so this queries the table
+   *  directly — no Edge Function needed just to look. Hidden entirely for
+   *  "both semesters" since editing needs one specific existing row. */
+  async _refreshCurrentGuidePanel() {
+    const panel = $('admin-guide-current');
+    const category = $('admin-category').value;
+    const semesterVal = $('admin-semester').value;
+    const moduleName = $('admin-module').value;
+
+    if (category !== 'guide' || semesterVal === 'both' || !moduleName) {
+      panel.classList.add('hidden');
+      return;
+    }
+
+    panel.classList.remove('hidden');
+    $('admin-guide-current-status').textContent = 'جارٍ التحقق من المحتوى الحالي…';
+    $('admin-guide-current-images').innerHTML = '';
+    $('admin-guide-load-edit-btn').disabled = true;
+
+    const semester = parseInt(semesterVal, 10);
+    const { data } = await Supabase.client
+      .from('guides')
+      .select('content_html')
+      .eq('module_name', moduleName)
+      .eq('semester', semester)
+      .maybeSingle();
+
+    // The admin may have switched module/semester again while this request
+    // was in flight — don't clobber a newer selection with a stale result.
+    if ($('admin-module').value !== moduleName || $('admin-semester').value !== semesterVal) return;
+
+    this._currentGuideHtml = data?.content_html || '';
+    const imageUrls = this._extractGuideImageUrls(this._currentGuideHtml);
+    const hasText = this._extractGuideText(this._currentGuideHtml).length > 0;
+
+    $('admin-guide-load-edit-btn').disabled = !this._currentGuideHtml;
+    $('admin-guide-current-status').textContent = this._currentGuideHtml
+      ? `يوجد محتوى مرفوع${hasText ? ' — نص' : ''}${imageUrls.length ? ` + ${imageUrls.length} صورة` : ''}.`
+      : 'لا يوجد محتوى مرفوع بعد لهذه المادة في هذا الفصل.';
+
+    const imgWrap = $('admin-guide-current-images');
+    imgWrap.innerHTML = '';
+    imageUrls.forEach((url) => {
+      const img = document.createElement('img');
+      img.src = url;
+      img.loading = 'lazy';
+      img.style.cssText = 'width:44px;height:44px;object-fit:cover;border-radius:6px;border:1px solid var(--slate-200,#e2e8f0);';
+      imgWrap.appendChild(img);
+    });
+  },
+
+  /** Loads the currently-live guide content into the editor: plain text into
+   *  the textarea, existing images into the kept-images list. Switches the
+   *  mode to "edit" so submitting rebuilds the guide from this draft rather
+   *  than appending to or blindly replacing what's live. */
+  loadGuideForEditing() {
+    if (!this._currentGuideHtml) {
+      this._setStatus('error', 'لا يوجد محتوى حالي لتحميله لهذه المادة.');
+      return;
+    }
+    $('admin-guide-mode-edit').checked = true;
+    $('admin-guide-text').value = this._extractGuideText(this._currentGuideHtml);
+    this._keptExistingImageUrls = this._extractGuideImageUrls(this._currentGuideHtml);
+    this._selectedGuideImages = [];
+    $('admin-guide-images-input').value = '';
+    $('admin-guide-images-text').textContent = 'اضغط لاختيار صورة أو أكثر';
+    this._renderGuideImagePreviews();
+    this.onGuideModeChange();
+    this._setStatus(null);
+  },
+
+  _selectedGuideMode() {
+    if ($('admin-guide-mode-edit').checked) return 'edit';
+    if ($('admin-guide-mode-replace').checked) return 'replace';
+    return 'append';
+  },
+
+  onGuideModeChange() {
+    const mode = this._selectedGuideMode();
+    const hint = $('admin-guide-mode-hint');
+
+    if (mode === 'edit') {
+      hint.textContent = 'سيُستبدل النص بالكامل بما تكتبه هنا، مع إبقاء الصور المختارة أدناه فقط بالإضافة لأي صور جديدة تضيفها.';
+      if (!this._currentGuideHtml) {
+        // Selected "edit" without anything to load (e.g. brand-new module) —
+        // fall back to append since there's nothing existing to edit.
+        this._setStatus('error', 'لا يوجد محتوى حالي لتعديله — استخدم "إضافة" أو "استبدال" بدلاً من ذلك.');
+        $('admin-guide-mode-append').checked = true;
+        return;
+      }
+      if (!$('admin-guide-text').value && this._keptExistingImageUrls.length === 0) {
+        // Mode switched via the radio directly (not via the load button) —
+        // load the current content automatically so "edit" always starts
+        // from what's actually live.
+        this.loadGuideForEditing();
+      }
+    } else if (mode === 'replace') {
+      hint.textContent = 'سيُحذف كل المحتوى القديم (نص وصور) ويُستبدل بالكامل بما تُدخله هنا.';
+      this._keptExistingImageUrls = [];
+      this._renderGuideImagePreviews();
+    } else {
+      hint.textContent = 'الوضع الافتراضي: إضافة النص والصور الجديدة أسفل ما تم رفعه سابقاً لهذه المادة (دون حذفه).';
+      this._keptExistingImageUrls = [];
+      this._renderGuideImagePreviews();
+    }
   },
 
   onGuideImagesSelected(e) {
@@ -131,6 +283,40 @@ export const AdminPanel = {
   _renderGuideImagePreviews() {
     const wrap = $('admin-guide-images-preview');
     wrap.innerHTML = '';
+
+    // Existing images the admin chose to keep (edit mode only) — shown
+    // first, with an amber border/badge so they're visually distinct from
+    // brand-new uploads. Removing one here just drops it from the kept
+    // list; the original stays untouched in storage either way.
+    this._keptExistingImageUrls.forEach((url, i) => {
+      const thumb = document.createElement('div');
+      thumb.style.cssText = 'position:relative;width:64px;height:64px;border-radius:8px;overflow:hidden;border:2px solid #f59e0b;';
+
+      const img = document.createElement('img');
+      img.src = url;
+      img.loading = 'lazy';
+      img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
+
+      const badge = document.createElement('div');
+      badge.textContent = 'حالية';
+      badge.style.cssText = 'position:absolute;bottom:0;left:0;right:0;background:rgba(245,158,11,.92);color:#fff;font-size:.55rem;text-align:center;line-height:1.4;';
+
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.textContent = '✕';
+      removeBtn.title = 'استبعاد من النسخة الجديدة';
+      removeBtn.style.cssText = 'position:absolute;top:2px;right:2px;width:18px;height:18px;line-height:18px;padding:0;border:none;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;font-size:.65rem;cursor:pointer;';
+      removeBtn.addEventListener('click', () => {
+        this._keptExistingImageUrls.splice(i, 1);
+        this._renderGuideImagePreviews();
+      });
+
+      thumb.appendChild(img);
+      thumb.appendChild(badge);
+      thumb.appendChild(removeBtn);
+      wrap.appendChild(thumb);
+    });
+
     this._selectedGuideImages.forEach((file, i) => {
       const thumb = document.createElement('div');
       thumb.style.cssText = 'position:relative;width:64px;height:64px;border-radius:8px;overflow:hidden;border:1px solid var(--slate-200,#e2e8f0);';
@@ -174,6 +360,7 @@ export const AdminPanel = {
         `<option value="${escHtml(p.base)}">${escHtml(p.base)}</option>`
       ).join('');
       $('admin-existing-list').innerHTML = '';
+      $('admin-guide-current').classList.add('hidden'); // no single existing row to show/edit in "both" mode
       return;
     }
 
@@ -183,6 +370,7 @@ export const AdminPanel = {
       `<option value="${escHtml(m.name)}">${escHtml(m.name)}</option>`
     ).join('');
     this._renderExistingList(semester);
+    this.onModuleChange();
   },
 
   /** Strips a trailing " 1" / " 2" (with any amount of leading whitespace) off a module name. */
@@ -322,10 +510,15 @@ export const AdminPanel = {
     const semesterVal = $('admin-semester').value;
     const moduleName  = $('admin-module').value;
     const text        = $('admin-guide-text').value.trim();
-    const mode        = $('admin-guide-replace-mode').checked ? 'replace' : 'append';
+    const mode        = this._selectedGuideMode(); // 'append' | 'replace' | 'edit'
 
     if (!moduleName) { this._setStatus('error', 'الرجاء اختيار مادة'); return; }
-    if (!text && this._selectedGuideImages.length === 0) {
+    if (mode === 'edit' && semesterVal === 'both') {
+      this._setStatus('error', 'وضع "تعديل المحتوى الحالي" غير متاح مع "كلا الفصلين" — اختر فصلاً واحداً لتعديله.');
+      return;
+    }
+    const hasAnyImage = this._selectedGuideImages.length > 0 || this._keptExistingImageUrls.length > 0;
+    if (!text && !hasAnyImage) {
       this._setStatus('error', 'الرجاء إدخال نص أو إضافة صورة واحدة على الأقل');
       return;
     }
@@ -353,6 +546,9 @@ export const AdminPanel = {
         form.append('module_name', target.moduleName);
         form.append('text', text);
         form.append('mode', mode);
+        if (mode === 'edit') {
+          form.append('keep_image_urls', JSON.stringify(this._keptExistingImageUrls));
+        }
         this._selectedGuideImages.forEach((file) => form.append('images', file));
 
         const { ok, json } = await Supabase.callFunctionMultipart('admin-upsert-guide', form);
@@ -364,15 +560,20 @@ export const AdminPanel = {
         }
       }
 
-      const modeMsg = mode === 'replace' ? 'تم استبدال محتوى الدليل بنجاح!' : 'تمت إضافة المحتوى الجديد إلى الدليل بنجاح!';
+      const modeMsg = mode === 'edit' ? 'تم تحديث الدليل بنجاح!'
+        : mode === 'replace' ? 'تم استبدال محتوى الدليل بنجاح!'
+        : 'تمت إضافة المحتوى الجديد إلى الدليل بنجاح!';
       const scopeMsg = targets.length > 1 ? ' (للفصلين معاً)' : '';
       this._setStatus('success', `✅ ${modeMsg}${scopeMsg} يفتح الآن كنافذة مجانية لجميع الطلاب.`);
       $('admin-guide-text').value = '';
       this._selectedGuideImages = [];
+      this._keptExistingImageUrls = [];
       $('admin-guide-images-input').value = '';
       $('admin-guide-images-preview').innerHTML = '';
       $('admin-guide-images-text').textContent = 'اضغط لاختيار صورة أو أكثر';
-      $('admin-guide-replace-mode').checked = false;
+      $('admin-guide-mode-append').checked = true;
+      this.onGuideModeChange();
+      await this._refreshCurrentGuidePanel(); // reflect what's now actually live
 
     } catch (err) {
       console.error('[AdminPanel._uploadGuide]', err);

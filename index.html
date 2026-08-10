@@ -610,7 +610,7 @@
 
       <div class="form-group">
         <label class="form-label">المادة / الوحدة</label>
-        <select class="form-select" id="admin-module"></select>
+        <select class="form-select" id="admin-module" onchange="App.AdminPanel.onModuleChange()"></select>
       </div>
 
       <div class="form-group">
@@ -642,6 +642,24 @@
       <!-- Text + images path — used for the Comprehensive Guide, opens
            as a plain scrollable window rather than the PDF viewer -->
       <div class="form-group hidden" id="admin-guide-fields">
+
+        <!-- Shows what's already live for the selected module/semester,
+             and lets the admin pull it into the editor below instead of
+             blindly appending/overwriting. Hidden for "both semesters"
+             (editing needs one specific existing row to load). -->
+        <div id="admin-guide-current" class="hidden"
+             style="margin-bottom:.9rem;padding:.7rem .8rem;background:var(--slate-50,#f8fafc);border:1px solid var(--slate-200,#e2e8f0);border-radius:8px;font-size:.8rem;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;">
+            <strong>المحتوى الحالي لهذه المادة</strong>
+            <button type="button" id="admin-guide-load-edit-btn" onclick="App.AdminPanel.loadGuideForEditing()"
+                    style="border:1px solid var(--slate-300,#cbd5e1);background:#fff;border-radius:6px;padding:.25rem .6rem;font-size:.75rem;cursor:pointer;white-space:nowrap;">
+              تحميل للتعديل ✏️
+            </button>
+          </div>
+          <div id="admin-guide-current-status" style="color:var(--slate-500,#64748b);margin-top:.3rem;">—</div>
+          <div id="admin-guide-current-images" style="display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.5rem;"></div>
+        </div>
+
         <label class="form-label">محتوى الدليل</label>
         <textarea class="form-input" id="admin-guide-text" rows="8"
                   placeholder="اكتب هنا محتوى الدليل الشامل — يمكنك إضافة الصور أدناه لتظهر أسفل هذا النص"
@@ -656,11 +674,24 @@
         </div>
         <div id="admin-guide-images-preview" style="display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.6rem;"></div>
 
-        <label style="display:flex;align-items:center;gap:.5rem;margin-top:.9rem;font-size:.85rem;color:var(--slate-500,#64748b);cursor:pointer;">
-          <input type="checkbox" id="admin-guide-replace-mode" style="width:auto;">
-          استبدال المحتوى الحالي بالكامل بدلاً من الإضافة إليه
-        </label>
-        <div style="font-size:.75rem;color:var(--slate-400,#94a3b8);margin-top:.25rem;">
+        <div style="display:flex;flex-direction:column;gap:.45rem;margin-top:.9rem;font-size:.85rem;">
+          <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;">
+            <input type="radio" name="admin-guide-mode" id="admin-guide-mode-append" value="append" checked
+                   onchange="App.AdminPanel.onGuideModeChange()" style="width:auto;">
+            إضافة أسفل المحتوى الحالي
+          </label>
+          <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;">
+            <input type="radio" name="admin-guide-mode" id="admin-guide-mode-replace" value="replace"
+                   onchange="App.AdminPanel.onGuideModeChange()" style="width:auto;">
+            استبدال المحتوى بالكامل (حذف القديم كله)
+          </label>
+          <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;">
+            <input type="radio" name="admin-guide-mode" id="admin-guide-mode-edit" value="edit"
+                   onchange="App.AdminPanel.onGuideModeChange()" style="width:auto;">
+            تعديل المحتوى الحالي (تحرير النص + اختيار الصور المُبقاة)
+          </label>
+        </div>
+        <div style="font-size:.75rem;color:var(--slate-400,#94a3b8);margin-top:.35rem;" id="admin-guide-mode-hint">
           الوضع الافتراضي: إضافة النص والصور الجديدة أسفل ما تم رفعه سابقاً لهذه المادة (دون حذفه).
         </div>
       </div>
