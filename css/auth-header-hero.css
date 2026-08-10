@@ -57,6 +57,20 @@
   }
   .form-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,.12); }
   .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .password-field { position: relative; }
+  .password-field .form-input { padding-right: 2.75rem; }
+  .password-toggle-btn {
+    position: absolute; right: .4rem; top: 50%; transform: translateY(-50%);
+    background: none; border: none; cursor: pointer; padding: .35rem;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--slate-500); border-radius: 6px; transition: color .15s, background .15s;
+  }
+  .password-toggle-btn:hover { color: var(--accent); background: var(--slate-50); }
+  .password-toggle-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .password-toggle-btn svg { width: 18px; height: 18px; display: block; pointer-events: none; }
+  .password-toggle-btn .icon-eye-off { display: none; }
+  .password-toggle-btn.is-visible .icon-eye { display: none; }
+  .password-toggle-btn.is-visible .icon-eye-off { display: block; }
   .btn-primary {
     width: 100%; padding: .8rem; border: none; border-radius: var(--radius-md);
     background: var(--accent); color: white; font-size: .95rem; font-weight: 600;

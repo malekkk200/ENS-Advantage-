@@ -20,6 +20,15 @@ import { render } from './router.js';
    AUTH
 ───────────────────────────────────────────────────────────── */
 export const Auth = {
+  togglePasswordVisibility(btn, inputId) {
+    const input = $(inputId);
+    if (!input) return;
+    const showing = input.type === 'text';
+    input.type = showing ? 'password' : 'text';
+    btn.classList.toggle('is-visible', !showing);
+    btn.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
+  },
+
   async loadState() {
     try {
       const { data: { session } } = await sb.auth.getSession();
