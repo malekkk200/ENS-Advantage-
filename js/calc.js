@@ -133,6 +133,10 @@ export const Calc = {
     const optionalRetake  = []; // 5 <= avg < 10 — catch-up optional
     const weakUEs = [];         // UE avg < 8 — must catch-up to raise above 8
     let filledModulesCount = 0;
+    // Total module count for this semester, used to gate the meme so it
+    // only plays once every module has TD+Exam filled in — not after
+    // just the first one (see MemeSystem.show call below).
+    const totalModulesCount = data.reduce((s, ue) => s + ue.modules.length, 0);
 
     data.forEach((ue, ueIdx) => {
       let ueWeighted = 0, ueCoefFilled = 0;
@@ -271,10 +275,17 @@ export const Calc = {
         ];
         semMentionEl.textContent = mentions.find(([t]) => semR >= t)[1];
       }
-      // Show the meme for the completed (or partial) GPA bracket.
+      // Show the meme only once ALL modules in this semester have both
+      // TD and Exam filled in — not after just the first module. While
+      // grades are still partial, keep the meme hidden so it doesn't pop
+      // up prematurely off a single (misleadingly high/low) module avg.
       // No GPA value is sent anywhere — memeSystem.show() resolves the
       // category client-side and plays the matching meme locally.
-      MemeSystem.show(semR, sem);
+      if (filledModulesCount === totalModulesCount) {
+        MemeSystem.show(semR, sem);
+      } else {
+        MemeSystem.hide(sem);
+      }
     } else {
       semValEl.textContent = '\u2014';
       semValEl.style.opacity = '1';
