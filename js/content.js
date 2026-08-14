@@ -89,22 +89,58 @@ export const Content = {
     $('cv-content').innerHTML = safeHtml;
   },
 
-  /** Always opens the Comprehensive Guide as a plain scrollable window — never the PDF viewer. */
+  /** Client-side cache for Comprehensive Guide TEXT only — separate from
+   *  any service-worker caching, and scoped strictly to this read path so
+   *  it never touches the admin panel's own guide queries (which must
+   *  always see live data right after an edit — see sw.js header note).
+   *  Bump the version below if a guide is substantially rewritten and
+   *  students should be forced to re-download the new text. */
+  _GUIDE_TEXT_CACHE_NAME: 'ens-guide-text-v1',
+
+  /** Always opens the Comprehensive Guide as a plain scrollable window — never the PDF viewer.
+   *  After the first open, the guide's text is served from the browser's own cache (zero
+   *  network) and its images are served from the service worker's cache (see sw.js) — so
+   *  re-opening an already-viewed guide uses no mobile data at all. */
   async _openGuide(mod, modName) {
     this._showHtml(mod, 'guide',
       '<div class="mock-content"><p style="text-align:center;padding:2rem">⏳ Loading…</p></div>');
 
-    const { data } = await sb
-      .from('guides')
-      .select('content_html')
-      .eq('module_name', modName)
-      .eq('semester', State.activeSemester)
-      .single();
+    const sem = State.activeSemester;
+    const cacheKey = new Request(`${location.origin}/__guide_text_cache__/${sem}/${encodeURIComponent(modName)}`);
 
-    const safeHtml = DOMPurify.sanitize(
-      (data?.content_html) ? data.content_html : this._fallbackHtml(mod, 'guide'),
-      { USE_PROFILES: { html: true } }
-    );
+    let contentHtml = null;
+    let cache = null;
+    if ('caches' in window) {
+      try {
+        cache = await caches.open(this._GUIDE_TEXT_CACHE_NAME);
+        const cached = await cache.match(cacheKey);
+        if (cached) contentHtml = await cached.text();
+      } catch (err) {
+        console.warn('[Guide cache] read failed, falling back to network:', err);
+        cache = null;
+      }
+    }
+
+    if (contentHtml === null) {
+      const { data } = await sb
+        .from('guides')
+        .select('content_html')
+        .eq('module_name', modName)
+        .eq('semester', sem)
+        .single();
+
+      contentHtml = data?.content_html || this._fallbackHtml(mod, 'guide');
+
+      // Only cache real, published content — never cache the "not
+      // uploaded yet" fallback, so a student who checks early (before
+      // the admin publishes) isn't stuck seeing an empty guide forever.
+      if (cache && data?.content_html) {
+        try { await cache.put(cacheKey, new Response(contentHtml)); }
+        catch (err) { console.warn('[Guide cache] write failed:', err); }
+      }
+    }
+
+    const safeHtml = DOMPurify.sanitize(contentHtml, { USE_PROFILES: { html: true } });
     $('cv-content').innerHTML = safeHtml;
   },
 
