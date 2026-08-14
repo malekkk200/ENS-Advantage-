@@ -95,7 +95,7 @@ export const Content = {
    *  always see live data right after an edit — see sw.js header note).
    *  Bump the version below if a guide is substantially rewritten and
    *  students should be forced to re-download the new text. */
-  _GUIDE_TEXT_CACHE_NAME: 'ens-guide-text-v1',
+  _GUIDE_TEXT_CACHE_NAME: 'ens-guide-text-v2',
 
   /** Always opens the Comprehensive Guide as a plain scrollable window — never the PDF viewer.
    *  After the first open, the guide's text is served from the browser's own cache (zero
