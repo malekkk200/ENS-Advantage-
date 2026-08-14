@@ -33,9 +33,12 @@ if (window.pdfjsLib) {
    ─────────────────────────────────────────────────────────────
    Architecture:
      1. open() → immediately shows skeleton + the overlay
-     2. _fetchSignedUrl() → calls supabase.storage.createSignedUrl()
-        with a 90-second TTL. The storage RLS policy is the gate —
-        a denied user gets an error, never a URL.
+     2. _fetchSignedUrl() → calls the get-material-url Edge Function,
+        which creates a 90-second-TTL signed URL as the requesting
+        user (so storage RLS is still the real gate — a denied user
+        gets an error, never a URL) and logs every attempt to
+        security_logs, soft-throttling abnormal request bursts from
+        one account before they reach storage.
      3. _loadPdf() → passes the signed URL to PDF.js getDocument().
         PDF.js streams the file; the raw bytes never appear in the
         DOM as a blob or data-URI — they live only in PDF.js' own
@@ -420,19 +423,26 @@ export const PDFViewer = (() => {
       if (!_devToolsTimer) _devToolsTimer = setInterval(_checkDevTools, 1200);
 
       // ── 1. Generate a short-lived signed URL (90 seconds) ──
-      // Storage RLS is evaluated here: if the user doesn't have
-      // the required subscription flag, Supabase returns an error
-      // and no URL is ever produced.
+      // Routed through the get-material-url Edge Function rather than
+      // calling storage.createSignedUrl() directly. Storage RLS is
+      // still the actual access gate (the function calls createSignedUrl()
+      // as this same user) — the function's job is to log every
+      // open attempt to security_logs and soft-throttle abnormal bursts,
+      // which a direct client→storage call has no way to do.
       let signedUrl;
       try {
-        const { data, error } = await sb.storage
-          .from('course-materials')
-          .createSignedUrl(material.storagePath, 90); // 90-second TTL
+        const { data, error } = await sb.functions.invoke('get-material-url', {
+          body: {
+            storage_path: material.storagePath,
+            material_id: material.id,
+            title: material.title,
+          },
+        });
 
         if (myToken !== _openToken) return; // superseded by a newer open() while awaiting
 
         if (error || !data?.signedUrl) {
-          console.error('[PDFViewer] createSignedUrl error:', error?.message);
+          console.error('[PDFViewer] get-material-url error:', error?.message || data?.error);
           _setError('Access denied or content unavailable. Please verify your subscription.');
           return;
         }
