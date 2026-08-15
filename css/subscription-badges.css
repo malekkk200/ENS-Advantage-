@@ -187,8 +187,15 @@
   .comm-feat-pill .feat-emoji { font-size: 1.15rem; line-height: 1; }
 
   /* ─── PRINT / KEYBOARD PROTECTION TOAST ─── */
+  /* top offset reserves the device's status-bar / notch height the same
+     way .pdf-toolbar does (see css/pdf-viewer.css) — without this the
+     toast rendered flush against the very top edge of the screen and
+     visually covered the PDF viewer's nav bar (prev/next/page/zoom/close)
+     whenever it appeared while a document was open. z-index is kept
+     above the PDF overlay (600) since the toast still needs to be seen,
+     it just now clears the toolbar instead of overlapping it. */
   .protection-toast {
-    position: fixed; top: 1rem; right: 1rem; background: var(--red); color: white;
+    position: fixed; top: calc(1rem + env(safe-area-inset-top, 0px)); right: calc(1rem + env(safe-area-inset-right, 0px)); background: var(--red); color: white;
     padding: .75rem 1.25rem; border-radius: var(--radius-md); font-size: .85rem; font-weight: 600;
     z-index: 1000; box-shadow: var(--shadow-lg); animation: slideDown .3s ease, fadeOutToast 3s forwards;
     display: flex; align-items: center; gap: .5rem;
@@ -196,6 +203,14 @@
   }
   @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
   @keyframes fadeOutToast { 0%, 70% { opacity: 1; } 100% { opacity: 0; pointer-events: none; } }
+
+  /* While the PDF viewer is open, drop the toast below the pdf-toolbar
+     (~60px min-height, see .pdf-toolbar) instead of just below the safe
+     area, so it never overlaps the page nav controls even on phones
+     with no notch/status-bar inset. */
+  #pdf-overlay:not(.hidden) ~ #protection-toast {
+    top: calc(70px + env(safe-area-inset-top, 0px));
+  }
 
   /* ─── FOOTER ─── */
   .footer { background: var(--slate-900); color: var(--slate-400); text-align: center; padding: 2rem 1.5rem; margin-top: 4rem; }
