@@ -31,10 +31,18 @@
     overflow: hidden;
   }
 
-  /* Top toolbar */
+  /* Top toolbar
+     padding-top also reserves the device's status-bar / notch height
+     (env(safe-area-inset-top)) so the toolbar's controls are never
+     drawn underneath it. This matters most in the Android app: with
+     targetSdk 35, Android enforces edge-to-edge rendering, so the
+     WebView paints all the way behind the system status bar — without
+     this the top row (title, page nav, close button) got clipped or
+     rendered partly under the status bar. The env() fallback to 0px
+     keeps this a no-op on browsers/devices that don't report an inset. */
   .pdf-toolbar {
     background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 100%);
-    padding: .85rem 1.25rem;
+    padding: calc(.85rem + env(safe-area-inset-top, 0px)) calc(1.25rem + env(safe-area-inset-right, 0px)) .85rem calc(1.25rem + env(safe-area-inset-left, 0px));
     display: flex; align-items: center; gap: .75rem;
     border-bottom: 1px solid rgba(255,255,255,.07);
     flex-shrink: 0;
@@ -223,12 +231,14 @@
   .pdf-err-icon { font-size: 2.5rem; }
   .pdf-err-msg  { font-size: .9rem; color: #94a3b8; max-width: 300px; line-height: 1.6; }
 
-  /* ── Security notice strip at the bottom ── */
+  /* ── Security notice strip at the bottom ──
+     Same edge-to-edge reasoning as the toolbar above, but for the
+     bottom system gesture bar. */
   .pdf-security-strip {
     flex-shrink: 0;
     background: rgba(0,0,0,.4);
     border-top: 1px solid rgba(255,255,255,.05);
-    padding: .45rem 1.25rem;
+    padding: .45rem calc(1.25rem + env(safe-area-inset-right, 0px)) calc(.45rem + env(safe-area-inset-bottom, 0px)) calc(1.25rem + env(safe-area-inset-left, 0px));
     display: flex; align-items: center; justify-content: center; gap: .5rem;
     font-size: .68rem; color: #334155; font-weight: 600; letter-spacing: .03em;
     text-transform: uppercase; user-select: none;
@@ -236,6 +246,13 @@
 
   @media (max-width: 640px) {
     .pdf-zoom-group { display: none; }
-    .pdf-toolbar { padding: .65rem 1rem; gap: .5rem; }
+    /* Keep the safe-area top/side insets from the base rule above —
+       only the base spacing shrinks on small screens, otherwise this
+       would re-introduce the status-bar clipping on phones, which is
+       exactly where it matters most. */
+    .pdf-toolbar {
+      padding: calc(.65rem + env(safe-area-inset-top, 0px)) calc(1rem + env(safe-area-inset-right, 0px)) .65rem calc(1rem + env(safe-area-inset-left, 0px));
+      gap: .5rem;
+    }
   }
 
