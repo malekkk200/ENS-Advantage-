@@ -1,2 +1,7 @@
 /build/*
 !/build/.npmkeep
+
+# Never commit the signing keystore — it's decoded from an encrypted
+# GitHub Actions secret at build time and deleted right after.
+*.keystore
+*.jks
