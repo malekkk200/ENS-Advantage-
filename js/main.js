@@ -46,6 +46,7 @@ import { Calc } from './calc.js';
 import { MemeSystem } from './memeSystem.js';
 import { MemeAdmin } from './memeAdmin.js';
 import { BackNav } from './backNav.js';
+import { MobileApp } from './mobileApp.js';
 
 // Registers its own document-level 'mousedown' / 'keydown' listeners
 // as a side effect of being imported — no exports needed.
@@ -73,6 +74,10 @@ window.App = { Auth, UI, Modules, Content, PDFViewer, AdminPanel, Protection, Su
 // Must be initialized before any overlay can possibly open, so the
 // very first back-gesture is already handled correctly.
 BackNav.init();
+
+// Mobile shell (bottom nav, profile bottom sheet, boot skeleton
+// fallback). No-op chrome on desktop — see css/mobile-app.css.
+MobileApp.init();
 
 Auth.loadState();
 
