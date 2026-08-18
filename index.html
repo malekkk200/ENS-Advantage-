@@ -121,7 +121,6 @@
   <link rel="stylesheet" href="css/calculator.css" />
   <link rel="stylesheet" href="css/meme-player.css" />
   <link rel="stylesheet" href="css/app-mode.css" />
-  <link rel="stylesheet" href="css/mobile-app.css" />
 
   <!-- ═══════════════════════════════════════════════════════════
        THIRD-PARTY LIBRARIES (UMD builds — attach to window.*)
@@ -141,22 +140,6 @@
   <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 </head>
 <body>
-
-<!-- ═══════════════════════════════════════════════════════════════
-     BOOT SKELETON (mobile only — see css/mobile-app.css §6)
-     Covers the brief gap between first paint and router.js's
-     render() deciding which real screen to show. router.js removes
-     this element itself once that decision is made; mobileApp.js
-     also arms a 6s fallback removal in case that line is ever
-     skipped, so mobile visitors are never stuck behind it.
-═══════════════════════════════════════════════════════════════ -->
-<div id="app-boot-skeleton" class="app-boot-skeleton">
-  <div class="skel-block" style="height:40px;border-radius:12px;"></div>
-  <div class="skel-block" style="height:120px;"></div>
-  <div class="skel-block" style="height:90px;"></div>
-  <div class="skel-block" style="height:90px;"></div>
-  <div class="skel-block" style="height:90px;"></div>
-</div>
 
 <!-- ═══════════════════════════════════════════════════════════════
      AUTH SCREEN
@@ -362,43 +345,6 @@
     </div>
   </header>
 
-  <!-- ═══════════════════════════════════════════════════════════
-       MOBILE DASHBOARD (mobile only — see css/mobile-app.css)
-       display:none by default outside the mobile breakpoint, so
-       this never renders on desktop. Reuses data-app-order so this
-       section can slot into the same content-first reorder that
-       app-mode.css already does for the native app — functional
-       content (curriculum, calculator) surfaces before the
-       marketing hero on mobile too, matching how e-learning apps
-       (Coursera/Duolingo-style) greet a returning student.
-       #dash-greeting-name is mirrored from #user-first-name by
-       js/mobileApp.js — no new source of truth for the user's name.
-  ═══════════════════════════════════════════════════════════ -->
-  <div class="mobile-dashboard" id="mobile-dashboard" data-app-order="dashboard">
-    <div class="dash-greeting">
-      <div class="dash-greeting-text">Welcome back, <span id="dash-greeting-name">student</span> 👋</div>
-      <div class="dash-greeting-sub">English Department · First Year</div>
-    </div>
-    <div class="dash-tiles">
-      <button class="dash-tile" data-target="curriculum-section">
-        <span class="dash-tile-icon" style="background:#dbeafe;">📚</span>
-        <span class="dash-tile-label">Courses</span>
-      </button>
-      <button class="dash-tile" data-target="calculator-section">
-        <span class="dash-tile-icon" style="background:#dcfce7;">🧮</span>
-        <span class="dash-tile-label">Calculator</span>
-      </button>
-      <button class="dash-tile" data-target="community-section-anchor">
-        <span class="dash-tile-icon" style="background:#ede9fe;">💬</span>
-        <span class="dash-tile-label">Community</span>
-      </button>
-      <button class="dash-tile" onclick="App.Subscription.open(undefined)">
-        <span class="dash-tile-icon" style="background:#ffedd5;">⚡</span>
-        <span class="dash-tile-label">Premium</span>
-      </button>
-    </div>
-  </div>
-
   <!-- HERO -->
   <section class="hero" id="top" data-app-order="hero">
     <div class="hero-inner">
@@ -470,7 +416,7 @@
 
 
   <!-- GRADE CALCULATOR -->
-  <section class="calc-section-bg" id="calculator-section" data-app-order="calculator">
+  <section class="calc-section-bg" data-app-order="calculator">
     <div style="max-width:900px;margin:0 auto;">
       <!-- Official catch-up (استدراك) rules are now explained inline,
            attached to each student's own calculated result (see
@@ -491,7 +437,7 @@
   </section>
 
   <!-- CURRICULUM -->
-  <section class="section" id="curriculum-section" data-app-order="curriculum">
+  <section class="section" data-app-order="curriculum">
     <h2 class="section-title reveal">Core Curriculum</h2>
     <p class="section-sub reveal" style="animation-delay: 0.1s;">All modules across both semesters — summaries, full lessons, and strategic guides</p>
 
@@ -510,7 +456,7 @@
   </section>
 
   <!-- PREMIUM COMMUNITY -->
-  <section class="section" id="community-section-anchor" style="padding-top:1rem;" data-app-order="community">
+  <section class="section" style="padding-top:1rem;" data-app-order="community">
     <div class="community-section">
       <div class="community-inner">
         <div class="reveal-left">
@@ -565,21 +511,6 @@
     </div>
     <div class="footer-copy" id="footer-year"></div>
   </footer>
-
-  <!-- ═══════════════════════════════════════════════════════════
-       BOTTOM NAVIGATION BAR (mobile only — see css/mobile-app.css §3)
-       display:none by default; the @media(max-width:768px) rule is
-       what turns it on, so desktop is never affected. Targets reuse
-       the section ids already on the page — no separate mobile
-       routes, no duplicated content.
-  ═══════════════════════════════════════════════════════════ -->
-  <nav id="bottom-nav" class="bottom-nav" aria-label="Mobile navigation">
-    <button class="bottom-nav-item active" data-target="mobile-dashboard"><span class="bnav-icon">🏠</span>Home</button>
-    <button class="bottom-nav-item" data-target="curriculum-section"><span class="bnav-icon">📚</span>Courses</button>
-    <button class="bottom-nav-item" data-target="calculator-section"><span class="bnav-icon">🧮</span>Calculator</button>
-    <button class="bottom-nav-item" data-target="community-section-anchor"><span class="bnav-icon">💬</span>Updates</button>
-    <button class="bottom-nav-item" data-target="profile"><span class="bnav-icon">👤</span>Profile</button>
-  </nav>
 
 </div><!-- /#main-app -->
 

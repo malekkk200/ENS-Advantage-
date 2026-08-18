@@ -21,9 +21,5 @@ export async function render() {
   } else {
     await UI.showMainApp();
   }
-  // A real screen is now showing — remove the mobile boot skeleton
-  // (see index.html / css/mobile-app.css §6). No-op on desktop,
-  // where the element is never visible in the first place.
-  document.getElementById('app-boot-skeleton')?.remove();
 }
 
