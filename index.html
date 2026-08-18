@@ -3,6 +3,28 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+  <!-- ═══════════════════════════════════════════════════════════
+       APP-MODE DETECTION
+       Runs synchronously, before any CSS is applied or the page
+       paints, so there's never a flash of the wrong layout.
+       window.Capacitor is injected by the native Android/iOS shell
+       (mobile-app/) before page scripts run — it is NOT present for
+       ordinary website/browser visitors, who get the class-less,
+       unchanged website layout exactly as before.
+       See css/app-mode.css for what this class actually changes:
+       purely visual reordering + safe-area padding for the native
+       app, zero effect on website markup, IDs, or JS behavior.
+  ═══════════════════════════════════════════════════════════ -->
+  <script>
+    (function () {
+      try {
+        if (window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform()) {
+          document.documentElement.classList.add('app-mode');
+        }
+      } catch (e) { /* never let detection break the website */ }
+    })();
+  </script>
   <title>ENS Advantage | English Studies Summaries &amp; Guides — ENS Kouba, Constantine, Ouargla, Oran &amp; Sétif</title>
 
   <!-- ═══════════════════════════════════════════════════════════
@@ -98,6 +120,7 @@
   <link rel="stylesheet" href="css/pdf-viewer.css" />
   <link rel="stylesheet" href="css/calculator.css" />
   <link rel="stylesheet" href="css/meme-player.css" />
+  <link rel="stylesheet" href="css/app-mode.css" />
 
   <!-- ═══════════════════════════════════════════════════════════
        THIRD-PARTY LIBRARIES (UMD builds — attach to window.*)
@@ -292,7 +315,7 @@
 <div id="main-app" class="hidden">
 
   <!-- HEADER -->
-  <header class="site-header">
+  <header class="site-header" data-app-order="header">
     <div class="header-inner">
       <a class="header-logo" href="#top">
         <img src="assets/logo.jpg" alt="ENS Advantage" />
@@ -323,7 +346,7 @@
   </header>
 
   <!-- HERO -->
-  <section class="hero" id="top">
+  <section class="hero" id="top" data-app-order="hero">
     <div class="hero-inner">
       <div class="hero-eyebrow reveal">🎓 École Normale Supérieure · English Department</div>
       <h1 class="hero-title reveal" style="animation-delay: 0.1s;">Your Academic Edge at<br/><span>ENS Advantage</span></h1>
@@ -350,7 +373,7 @@
   </section>
 
   <!-- GRADING SYSTEM -->
-  <section style="padding:4rem 1.5rem;background:white;">
+  <section style="padding:4rem 1.5rem;background:white;" data-app-order="grading">
     <div style="max-width:1200px;margin:0 auto;">
       <div style="text-align:center;margin-bottom:2.5rem;" class="reveal">
         <h2 class="section-title font-arabic" dir="rtl">نظام المدرسة العليا للأساتذة</h2>
@@ -393,7 +416,7 @@
 
 
   <!-- GRADE CALCULATOR -->
-  <section class="calc-section-bg">
+  <section class="calc-section-bg" data-app-order="calculator">
     <div style="max-width:900px;margin:0 auto;">
       <!-- Official catch-up (استدراك) rules are now explained inline,
            attached to each student's own calculated result (see
@@ -414,7 +437,7 @@
   </section>
 
   <!-- CURRICULUM -->
-  <section class="section">
+  <section class="section" data-app-order="curriculum">
     <h2 class="section-title reveal">Core Curriculum</h2>
     <p class="section-sub reveal" style="animation-delay: 0.1s;">All modules across both semesters — summaries, full lessons, and strategic guides</p>
 
@@ -433,7 +456,7 @@
   </section>
 
   <!-- PREMIUM COMMUNITY -->
-  <section class="section" style="padding-top:1rem;">
+  <section class="section" style="padding-top:1rem;" data-app-order="community">
     <div class="community-section">
       <div class="community-inner">
         <div class="reveal-left">
