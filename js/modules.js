@@ -10,6 +10,21 @@ import { Subscription } from './subscription.js';
 /* ─────────────────────────────────────────────────────────────
    MODULES — semester tabs + module list
 ───────────────────────────────────────────────────────────── */
+// Course-card accent palette (mobile only — see css/mobile-app.css).
+// Reuses existing design tokens, just cycled per card so the
+// curriculum list reads as distinct course cards rather than one
+// flat accordion. Purely a display cycle — carries no meaning and
+// touches no module data.
+const COURSE_ACCENTS = ['var(--accent)', 'var(--purple)', 'var(--green)', 'var(--orange)', 'var(--gold)'];
+
+function initialsFor(name) {
+  const trimmed = (name || '').trim();
+  if (!trimmed) return '•';
+  // Works for both Latin and Arabic module names — just the first
+  // visible character, uppercased where that's meaningful.
+  return trimmed[0].toUpperCase();
+}
+
 export const Modules = {
   switchSemester(num) {
     State.activeSemester = num;
@@ -48,14 +63,18 @@ export const Modules = {
         card.style.animationDelay = Math.min(index * 0.08, 0.5) + 's';
       }
       card.id = 'mod-card-' + CSS.escape(mod.name);
+      card.style.setProperty('--course-accent', COURSE_ACCENTS[index % COURSE_ACCENTS.length]);
 
       const header = document.createElement('div');
       header.className = 'module-header';
       header.onclick = () => this.toggleModule(mod.name);
       header.innerHTML = `
         <div class="module-info">
-          <div class="module-name${mod.rtl ? ' rtl' : ''}" ${mod.rtl ? 'dir="rtl"' : ''}>${escHtml(mod.name)}</div>
-          <div class="coef-pill">⚖ Coefficient: ${mod.coef}</div>
+          <div class="module-icon-badge">${escHtml(initialsFor(mod.name))}</div>
+          <div>
+            <div class="module-name${mod.rtl ? ' rtl' : ''}" ${mod.rtl ? 'dir="rtl"' : ''}>${escHtml(mod.name)}</div>
+            <div class="coef-pill">⚖ Coefficient: ${mod.coef}</div>
+          </div>
         </div>
         <div class="module-chevron">▾</div>
       `;

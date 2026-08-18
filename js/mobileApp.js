@@ -18,6 +18,8 @@ export const MobileApp = {
     try {
       this.detectStandalone();
       this.wireBottomNav();
+      this.wireDashboardTiles();
+      this.wireGreetingName();
       this.wireProfileSheet();
       this.wireActiveSectionTracking();
       this.wireTouchFeedback();
@@ -55,6 +57,35 @@ export const MobileApp = {
     });
   },
 
+  /* Dashboard quick-action tiles → same scroll-to-section pattern
+     as the bottom nav (the Premium tile calls App.Subscription.open
+     directly via its own inline onclick in index.html, so it's not
+     handled here). */
+  wireDashboardTiles() {
+    document.querySelectorAll('.dash-tile[data-target]').forEach(tile => {
+      tile.addEventListener('click', () => {
+        const el = document.getElementById(tile.getAttribute('data-target'));
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
+  },
+
+  /* Mirrors the existing #user-first-name text into the dashboard
+     greeting — no second source of truth for the user's name, and
+     no change to how/when that element itself gets populated by
+     auth.js/ui.js. */
+  wireGreetingName() {
+    const source = $('user-first-name');
+    const target = $('dash-greeting-name');
+    if (!source || !target) return;
+    const sync = () => {
+      const name = source.textContent.trim();
+      if (name) target.textContent = name;
+    };
+    sync();
+    new MutationObserver(sync).observe(source, { childList: true, characterData: true, subtree: true });
+  },
+
   /* Highlights the bottom-nav item matching the section currently
      in view, using IntersectionObserver (cheap, no scroll-handler
      math). Desktop has no equivalent chrome, so this is a no-op
@@ -63,7 +94,7 @@ export const MobileApp = {
   wireActiveSectionTracking() {
     const nav = $('bottom-nav');
     if (!nav || !('IntersectionObserver' in window)) return;
-    const ids = ['top', 'curriculum-section', 'calculator-section', 'community-section-anchor'];
+    const ids = ['mobile-dashboard', 'curriculum-section', 'calculator-section', 'community-section-anchor'];
     const sections = ids.map(id => document.getElementById(id)).filter(Boolean);
     if (!sections.length) return;
 
@@ -145,7 +176,7 @@ export const MobileApp = {
      inline styles, easy to extend to future components. */
   wireTouchFeedback() {
     if (!MOBILE_MQ.matches) return;
-    document.querySelectorAll('.grading-card, .module-header, .bottom-nav-item, .chat-btn, .tab-btn')
+    document.querySelectorAll('.grading-card, .module-header, .bottom-nav-item, .chat-btn, .tab-btn, .dash-tile')
       .forEach(el => el.classList.add('tap-feedback'));
   },
 

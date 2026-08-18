@@ -159,6 +159,89 @@
   .tap-feedback:active { transform: scale(.97); transition: transform .08s; }
 }
 
-/* Bottom nav + boot skeleton stay off-screen entirely outside the
-   mobile breakpoint, regardless of viewport-mode class toggling. */
+/* Bottom nav, dashboard, and course-card badges stay off-screen
+   entirely outside the mobile breakpoint, regardless of any class
+   toggling elsewhere (app-mode, standalone, etc.) — desktop can
+   never render them, full stop. */
 .bottom-nav { display: none; }
+.mobile-dashboard { display: none; }
+.module-icon-badge { display: none; }
+
+@media (max-width: 768px) {
+
+  /* ── 7) Content-first layout ─────────────────────────────────
+     Same technique app-mode.css already uses for the native app
+     (CSS `order` on a flex #main-app — HTML source order, ids, and
+     JS are untouched), extended to mobile web + installed PWA:
+     an e-learning app should open on what a returning student came
+     for (their courses, the calculator), with the marketing pitch
+     available below rather than first. Skipped entirely when
+     html.app-mode is already set, since that reorder already runs
+     and this would just fight it. */
+  html:not(.app-mode) #main-app {
+    display: flex;
+    flex-direction: column;
+  }
+  html:not(.app-mode) [data-app-order="header"]      { order: 1; }
+  html:not(.app-mode) [data-app-order="dashboard"]    { order: 2; }
+  html:not(.app-mode) [data-app-order="curriculum"]   { order: 3; }
+  html:not(.app-mode) [data-app-order="calculator"]   { order: 4; }
+  html:not(.app-mode) [data-app-order="hero"]         { order: 5; }
+  html:not(.app-mode) [data-app-order="grading"]      { order: 6; }
+  html:not(.app-mode) [data-app-order="community"]    { order: 7; }
+  html:not(.app-mode) #main-app > .footer             { order: 8; }
+
+  /* app-mode already reorders without a dashboard section — slot
+     it in right after the header there too. Same order value as
+     the header (1) is intentional: flex resolves equal `order`
+     values by source order, and the dashboard div comes right
+     after </header> in the HTML, so it still lands second. */
+  html.app-mode [data-app-order="dashboard"] { order: 1; }
+
+  /* ── 8) Dashboard banner + quick-action tiles ─────────────────
+     Same navy/accent tokens as the rest of the site — no new
+     colors. This is the actual "front door" of the app on mobile
+     now, in place of the desktop marketing hero. */
+  .mobile-dashboard {
+    display: block;
+    background: linear-gradient(135deg, var(--navy) 0%, var(--navy-mid) 100%);
+    padding: 1.5rem 1.1rem 1.75rem;
+    border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+    color: white;
+  }
+  .dash-greeting-text { font-size: 1.15rem; font-weight: 700; }
+  .dash-greeting-sub { font-size: .8rem; color: #93c5fd; margin-top: .2rem; }
+  .dash-tiles {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: .6rem;
+    margin-top: 1.25rem;
+  }
+  .dash-tile {
+    display: flex; flex-direction: column; align-items: center; gap: .4rem;
+    background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14);
+    border-radius: var(--radius-md); padding: .7rem .3rem; cursor: pointer;
+    color: white; font-family: 'Inter', sans-serif;
+  }
+  .dash-tile-icon {
+    width: 34px; height: 34px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.05rem;
+  }
+  .dash-tile-label { font-size: .65rem; font-weight: 600; }
+
+  /* ── 9) Course cards (module list) ─────────────────────────────
+     --course-accent is set per card in js/modules.js (cycled from
+     the existing token palette). A left accent stripe + a colored
+     initial badge turn the flat accordion into distinct,
+     recognizable course cards. */
+  .module-card {
+    border-left: 4px solid var(--course-accent, var(--accent));
+    overflow: hidden;
+  }
+  .module-info { display: flex; align-items: center; gap: .75rem; }
+  .module-icon-badge {
+    display: flex; align-items: center; justify-content: center;
+    width: 38px; height: 38px; border-radius: var(--radius-md);
+    background: var(--course-accent, var(--accent));
+    color: white; font-weight: 800; font-size: 1rem; flex-shrink: 0;
+  }
+}
