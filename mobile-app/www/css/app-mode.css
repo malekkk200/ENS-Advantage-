@@ -30,12 +30,77 @@
    not squeezed into it, so the logo/badges/user-chip never shift or
    get cramped. */
 
+/* ── Font size independent of the phone's system font-scale ──────
+   Android's WebView applies the device's accessibility "font size"
+   setting as a multiplier on top of every rem/em value by default
+   (Capacitor's WebView mirrors system font scale via textZoom,
+   locked to 100 in MainActivity.java to match this). This CSS rule
+   is the belt-and-suspenders half of that fix — it also disables
+   the browser engine's own automatic text-inflation, which is a
+   separate mechanism from font-scale and can independently bump
+   font sizes in narrow columns. Together, text always renders at
+   the size actually specified in the CSS, on every device. */
+html.app-mode {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 html.app-mode .site-header {
   height: auto;
   padding-top: env(safe-area-inset-top, 0px);
 }
 html.app-mode .header-inner {
   height: 90px;
+}
+
+/* ── Overlapping header elements fix ──────────────────────────────
+   The website's .header-center (premium button / membership badge)
+   is `position:absolute; left:50%` — centered on the header's full
+   width with zero awareness of how much room the logo and user-chip
+   are actually using. On narrower phones (lower logical/dp width,
+   commonly mislabeled "DPI" but really just less horizontal space)
+   that overlaps the logo or user-chip instead of sitting cleanly
+   between them, since nothing pushes it out of the way.
+
+   Fix: turn .header-inner into a 3-column grid (logo | center |
+   right) so the center badge/button is a normal grid item that gets
+   its own reserved column and can never sit on top of its
+   neighbors, on any screen width. `min-width: 0` on each column lets
+   its content shrink/truncate instead of forcing overflow. */
+html.app-mode .header-inner {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: .5rem;
+}
+html.app-mode .header-logo,
+html.app-mode .header-right {
+  min-width: 0;
+}
+html.app-mode .header-center {
+  position: static;
+  transform: none;
+  left: auto;
+  min-width: 0;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+}
+html.app-mode .header-center .subscription-btn,
+html.app-mode .header-center .elite-badge,
+html.app-mode .header-center .partial-badge {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* On very narrow phones, even a shrunk badge can crowd the avatar
+   chip — cap its font size instead of letting rem push it wider. */
+@media (max-width: 360px) {
+  html.app-mode .header-center .subscription-btn {
+    font-size: .72rem;
+    padding: .4rem .9rem;
+  }
 }
 
 /* Modals + the guide/content overlay: give the centered box real
