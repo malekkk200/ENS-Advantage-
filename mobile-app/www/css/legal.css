@@ -1,0 +1,54 @@
+/* ═══════════════════════════════════════════════════════════════
+   LEGAL PAGES — Privacy Policy / Terms of Service
+   Reuses css/base.css variables/fonts; adds only what's specific
+   to a long-form bilingual document layout.
+═══════════════════════════════════════════════════════════════ */
+
+.legal-page { min-height: 100vh; background: var(--slate-50); }
+
+.legal-topbar {
+  background: var(--navy); color: white; padding: 1rem 1.5rem;
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  flex-wrap: wrap;
+}
+.legal-topbar a.legal-home {
+  color: white; text-decoration: none; font-weight: 800; font-size: 1.05rem;
+  display: flex; align-items: center; gap: .5rem;
+}
+.legal-lang-toggle { display: flex; gap: .5rem; }
+.legal-lang-toggle button {
+  background: rgba(255,255,255,.12); color: white; border: 1px solid rgba(255,255,255,.25);
+  padding: .4rem .9rem; border-radius: var(--radius-md); font-weight: 700; font-size: .85rem;
+  cursor: pointer; transition: background .15s;
+}
+.legal-lang-toggle button.active { background: var(--accent); border-color: var(--accent); }
+.legal-lang-toggle button:hover { background: rgba(255,255,255,.22); }
+
+.legal-container { max-width: 780px; margin: 0 auto; padding: 2.5rem 1.5rem 4rem; }
+.legal-updated { color: var(--slate-500); font-size: .85rem; margin-bottom: 2rem; }
+.legal-container h1 { font-size: 1.9rem; color: var(--navy); margin-bottom: .5rem; }
+.legal-container h2 {
+  font-size: 1.2rem; color: var(--navy); margin: 2.2rem 0 .75rem;
+  padding-bottom: .4rem; border-bottom: 2px solid var(--slate-200);
+}
+.legal-container h3 { font-size: 1rem; color: var(--slate-800); margin: 1.25rem 0 .5rem; }
+.legal-container p { color: var(--slate-700); line-height: 1.75; margin-bottom: .9rem; }
+.legal-container ul, .legal-container ol { margin: 0 0 1rem; padding-inline-start: 1.4rem; color: var(--slate-700); line-height: 1.75; }
+.legal-container li { margin-bottom: .4rem; }
+.legal-container strong { color: var(--slate-900); }
+.legal-container table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.4rem; font-size: .88rem; }
+.legal-container th, .legal-container td { border: 1px solid var(--slate-200); padding: .55rem .7rem; text-align: start; }
+.legal-container th { background: var(--slate-100); color: var(--slate-800); }
+.legal-callout {
+  background: var(--accent-light); border: 1px solid var(--accent);
+  border-radius: var(--radius-md); padding: 1rem 1.2rem; margin: 1.2rem 0; font-size: .92rem;
+}
+.legal-callout.danger { background: var(--red-light); border-color: var(--red); }
+.legal-contact {
+  margin-top: 2.5rem; padding: 1.25rem; background: white; border: 1px solid var(--slate-200);
+  border-radius: var(--radius-lg);
+}
+
+/* Arabic sections use the site's existing .font-arabic convention (Cairo, RTL) */
+#content-ar { display: none; }
+#content-ar, #content-ar * { font-family: 'Cairo', sans-serif; }

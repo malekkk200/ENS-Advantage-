@@ -1,0 +1,94 @@
+/* ═══════════════════════════════════════════════════════════════
+   BASE — resets, design tokens (:root variables), scroll-reveal animation primitives
+═══════════════════════════════════════════════════════════════ */
+
+/* ─────────────────────────────────────────────────────────────
+   VISIBILITY UTILITY
+   The whole app shows/hides screens, modals, dropdowns, and the
+   PDF viewer overlay by toggling this class via
+   classList.add('hidden') / classList.remove('hidden') (100+
+   call sites in js/*.js). This rule was missing from the original
+   stylesheet, which meant nothing using it (e.g. the PDF overlay,
+   whose backdrop has `display:flex` unconditionally) ever
+   actually hid. !important is intentional here — it must win over
+   every other `display` declaration on any element it's applied to.
+───────────────────────────────────────────────────────────── */
+.hidden { display: none !important; }
+
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Cairo:wght@400;600;700&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  html, body {
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+
+  :root {
+    --navy: #0f1f3d;
+    --navy-mid: #1a3460;
+    --navy-light: #234080;
+    --accent: #2563eb;
+    --accent-hover: #1d4ed8;
+    --accent-light: #dbeafe;
+    --gold: #f59e0b;
+    --slate-50: #f8fafc;
+    --slate-100: #f1f5f9;
+    --slate-200: #e2e8f0;
+    --slate-300: #cbd5e1;
+    --slate-400: #94a3b8;
+    --slate-500: #64748b;
+    --slate-600: #475569;
+    --slate-700: #334155;
+    --slate-800: #1e293b;
+    --slate-900: #0f172a;
+    --green: #16a34a;
+    --green-light: #dcfce7;
+    --orange: #ea580c;
+    --orange-light: #ffedd5;
+    --red: #dc2626;
+    --red-light: #fee2e2;
+    --purple: #7c3aed;
+    --purple-light: #ede9fe;
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 16px;
+    --radius-xl: 20px;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.05);
+    --shadow-md: 0 4px 16px rgba(0,0,0,.10), 0 2px 6px rgba(0,0,0,.06);
+    --shadow-lg: 0 10px 40px rgba(0,0,0,.14), 0 4px 12px rgba(0,0,0,.08);
+  }
+
+  body { font-family: 'Inter', sans-serif; background: var(--slate-50); color: var(--slate-800); }
+
+  .font-arabic { font-family: 'Cairo', sans-serif; }
+
+  /* ─── SCROLL REVEAL MECHANISM ─── */
+  .reveal, .reveal-left, .reveal-right {
+    opacity: 0;
+    visibility: hidden;
+  }
+  .reveal.active, .reveal-left.active, .reveal-right.active {
+    visibility: visible;
+  }
+  .reveal.active { animation: revealUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+  .reveal-left.active { animation: revealLeft 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+  .reveal-right.active { animation: revealRight 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+
+  @keyframes revealUp {
+    from { opacity: 0; transform: translateY(40px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes revealLeft {
+    from { opacity: 0; transform: translateX(-40px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+  @keyframes revealRight {
+    from { opacity: 0; transform: translateX(40px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+

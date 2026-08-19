@@ -1,0 +1,90 @@
+/* ═══════════════════════════════════════════════════════════════
+   APP-MODE — native Android/iOS app only
+   ───────────────────────────────────────────────────────────────
+   Every rule in this file is scoped under html.app-mode, which is
+   only ever added by the inline detection script in <head> when
+   window.Capacitor.isNativePlatform() is true. Ordinary website
+   visitors (desktop or mobile browser, or the installed PWA opened
+   from a browser) never get this class, so nothing here changes
+   how the website looks or behaves.
+
+   Two things happen here, and nothing else:
+
+   1) SECTION ORDER — the website is a marketing/landing page first
+      (pitch → grading formulas → calculator → lessons → community),
+      which makes sense for a first-time visitor deciding whether to
+      sign up. But everyone who opens the *app* already has an
+      account — they open it to use the calculator or read a lesson,
+      not to be sold on the platform again. So in app-mode the
+      functional content (Curriculum, Calculator) moves to the top,
+      right under the header, and the pitch/reference content (Hero,
+      Grading formulas, Community) moves below it. This uses CSS
+      `order` on a flex container — the HTML source order, every
+      element's id, and all JS (querySelectors, #anchors, event
+      handlers) are completely untouched; only the visual position
+      changes.
+
+   2) SAFE-AREA PADDING — Android apps targeting SDK 35 draw
+      edge-to-edge by default, meaning page content starts at the
+      literal top/bottom pixel of the screen, under the system
+      status bar and gesture-nav bar. The website doesn't need this
+      (a browser's own UI already reserves that space), which is
+      why it wasn't applied globally — but inside the app, without
+      it, the header and modal close buttons render partially under
+      the status bar. env(safe-area-inset-*) reports the real inset
+      per device (0 on old/no-notch phones, correctly sized on
+      notched/punch-hole ones) so this never overlaps.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── 1) Section order ─────────────────────────────────────────── */
+
+html.app-mode #main-app {
+  display: flex;
+  flex-direction: column;
+}
+
+html.app-mode [data-app-order="header"]      { order: 1; }
+html.app-mode [data-app-order="curriculum"]  { order: 2; }
+html.app-mode [data-app-order="calculator"]  { order: 3; }
+html.app-mode [data-app-order="hero"]        { order: 4; }
+html.app-mode [data-app-order="grading"]     { order: 5; }
+html.app-mode [data-app-order="community"]   { order: 6; }
+html.app-mode #main-app > .footer            { order: 7; }
+
+/* ── 2) Safe-area padding (status bar / gesture nav) ─────────────
+   .site-header keeps its real 90px content height unchanged (moved
+   onto .header-inner) — the inset is added as extra space above it,
+   not squeezed into it, so the logo/badges/user-chip never shift or
+   get cramped. */
+
+html.app-mode .site-header {
+  height: auto;
+  padding-top: env(safe-area-inset-top, 0px);
+}
+html.app-mode .header-inner {
+  height: 90px;
+}
+
+/* Modals + the guide/content overlay: give the centered box real
+   clearance from the status bar and gesture-nav bar, on top of the
+   1rem they already have, so the close button (top-right) and any
+   bottom action buttons never sit under system UI. */
+html.app-mode .modal-overlay,
+html.app-mode .content-overlay-bg {
+  padding-top: calc(1rem + env(safe-area-inset-top, 0px));
+  padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+}
+
+/* Footer is the last thing on the page — make sure its bottom edge
+   clears the gesture-nav bar instead of butting right up against it. */
+html.app-mode #main-app > .footer {
+  padding-bottom: calc(2rem + env(safe-area-inset-bottom, 0px));
+}
+
+/* auth-screen (login/signup, shown before #main-app) is a separate
+   top-level element outside #main-app, so it needs the same header
+   clearance independently. */
+html.app-mode .auth-screen {
+  padding-top: calc(1rem + env(safe-area-inset-top, 0px));
+  padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+}

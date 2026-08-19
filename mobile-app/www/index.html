@@ -1,0 +1,965 @@
+<!DOCTYPE html>
+<!-- ═══════════════════════════════════════════════════════════════
+     THIS IS THE NATIVE-APP COPY — mobile-app/www/index.html
+     ───────────────────────────────────────────────────────────────
+     Bundled locally into the Android/iOS app at build time (see
+     mobile-app/capacitor.config.json — no `server.url`, so the app
+     never loads the live website over the network). This file is
+     independent from the root /index.html that serves
+     ens-advantage.vercel.app: editing one never affects the other,
+     and there is no shared build step between them.
+
+     Both copies import the same js/config.js (public Supabase anon
+     key + RLS, safe to duplicate) and call the same Supabase
+     project / Edge Functions / Brevo integration — so all backend
+     behavior (auth, grading data, emails) stays identical between
+     the app and the website. Only the frontend markup/CSS/JS in
+     this folder is free to diverge for the native-app redesign.
+═══════════════════════════════════════════════════════════════ -->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+  <!-- ═══════════════════════════════════════════════════════════
+       APP-MODE DETECTION
+       Runs synchronously, before any CSS is applied or the page
+       paints, so there's never a flash of the wrong layout.
+       window.Capacitor is injected by the native Android/iOS shell
+       (mobile-app/) before page scripts run — it is NOT present for
+       ordinary website/browser visitors, who get the class-less,
+       unchanged website layout exactly as before.
+       See css/app-mode.css for what this class actually changes:
+       purely visual reordering + safe-area padding for the native
+       app, zero effect on website markup, IDs, or JS behavior.
+  ═══════════════════════════════════════════════════════════ -->
+  <script>
+    (function () {
+      try {
+        if (window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform()) {
+          document.documentElement.classList.add('app-mode');
+        }
+      } catch (e) { /* never let detection break the website */ }
+    })();
+  </script>
+  <title>ENS Advantage | English Studies Summaries &amp; Guides — ENS Kouba, Constantine, Ouargla, Oran &amp; Sétif</title>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       LOCAL SEO METADATA
+       Targets first-year English Department students across the
+       Algerian ENS network. Keyword phrases are blended into natural
+       French/English/Arabic sentences (not stuffed) since that's how
+       students in Algeria actually search — a mix of the official
+       French institution names, their common English abbreviations,
+       and Arabic transliterations. See README.md for the full write-up
+       of this strategy and how to extend it to future campuses.
+  ═══════════════════════════════════════════════════════════ -->
+  <meta name="description" content="ENS Advantage — plateforme académique pour les étudiants du Département d'Anglais en 1ère année : résumés, cours complets et guides stratégiques. Pour les étudiants de l'ENS Kouba (École Normale Supérieure - Kouba), ENS Constantine (École Normale Supérieure de Constantine), ENS Ouargla (المدرسة العليا للأساتذة بورقلة), École Normale Supérieure d'Oran (ENS d'Oran) et ENS Sétif - Messaoud Zeghar (المدرسة العليا للأساتذة سطيف - مسعود زقار)." />
+  <meta name="keywords" content="ENS Kouba, École Normale Supérieure Kouba, ENS Constantine, École Normale Supérieure de Constantine, ENS Ouargla, المدرسة العليا للأساتذة بورقلة, École Normale Supérieure d'Oran, ENS d'Oran, ENS Sétif, المدرسة العليا للأساتذة سطيف مسعود زقار, English students, first-year English lessons, English summaries, English study guides, ENS Advantage" />
+  <meta name="author" content="ENS Advantage" />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://ens-advantage.vercel.app/" />
+
+  <!-- ═══════════════════════════════════════════════════════════
+       PWA — installable app metadata
+       manifest.json + icons let ENS Advantage be installed to a
+       phone/desktop home screen as a standalone app (Add to Home
+       Screen / install prompt). sw.js (registered at the bottom of
+       this file) caches the app shell for instant repeat loads and
+       basic offline support.
+  ═══════════════════════════════════════════════════════════ -->
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#0f1f3d" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/icons/icon-32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/assets/icons/icon-16.png" />
+  <link rel="shortcut icon" href="/favicon.ico" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/icons/icon-180.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="ENS Advantage" />
+  <meta name="mobile-web-app-capable" content="yes" />
+
+  <!-- Open Graph (Facebook, WhatsApp, Telegram link previews — the
+       channels these students actually share links through) -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="ENS Advantage" />
+  <meta property="og:title" content="ENS Advantage | English Studies Summaries &amp; Guides for ENS Kouba, Constantine, Ouargla, Oran &amp; Sétif" />
+  <meta property="og:description" content="Résumés, cours complets et guides stratégiques en anglais pour les étudiants de 1ère année de l'ENS Kouba, ENS Constantine, ENS Ouargla (المدرسة العليا للأساتذة بورقلة), ENS d'Oran et ENS Sétif - Messaoud Zeghar." />
+  <meta property="og:url" content="https://ens-advantage.vercel.app/" />
+  <meta property="og:image" content="https://ens-advantage.vercel.app/assets/logo.jpg" />
+  <meta property="og:locale" content="fr_FR" />
+  <meta property="og:locale:alternate" content="en_US" />
+  <meta property="og:locale:alternate" content="ar_DZ" />
+
+  <!-- Twitter/X card — falls back to Open Graph tags if omitted, but
+       explicit summary_large_image gives a bigger link preview -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="ENS Advantage | English Studies Summaries &amp; Guides — ENS Kouba, Constantine, Ouargla, Oran &amp; Sétif" />
+  <meta name="twitter:description" content="Résumés, cours complets et guides stratégiques pour les étudiants du Département d'Anglais — ENS Kouba, Constantine, Ouargla, Oran, Sétif." />
+  <meta name="twitter:image" content="https://ens-advantage.vercel.app/assets/logo.jpg" />
+
+  <!-- Structured data (schema.org) — this is what actually drives rich
+       results in Google today; the classic meta-keywords tag above is
+       included because it was explicitly requested, but Google itself
+       has ignored it since 2009. This WebSite block is the modern
+       equivalent that search engines actually read. ENS Advantage is
+       described as a resource platform *serving* these campuses, not
+       as being those institutions themselves — accuracy here matters
+       both for SEO trust signals and for not misrepresenting official
+       schools. -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "ENS Advantage",
+    "url": "https://ens-advantage.vercel.app/",
+    "description": "Plateforme académique de résumés, cours complets et guides stratégiques pour les étudiants de 1ère année du Département d'Anglais, au service des étudiants des Écoles Normales Supérieures d'Algérie : ENS Kouba, ENS Constantine, ENS Ouargla, ENS d'Oran et ENS Sétif (Messaoud Zeghar).",
+    "inLanguage": ["fr", "en", "ar"],
+    "audience": {
+      "@type": "EducationalAudience",
+      "educationalRole": "student",
+      "name": "First-year English Department students at Algerian ENS campuses (ENS Kouba, ENS Constantine, ENS Ouargla, ENS d'Oran, ENS Sétif)"
+    }
+  }
+  </script>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       STYLES
+       Split into thematic files (see /css). Loaded in the same
+       order the rules appeared in the original stylesheet, so
+       cascade/specificity behaviour is unchanged.
+  ═══════════════════════════════════════════════════════════ -->
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/auth-header-hero.css" />
+  <link rel="stylesheet" href="css/sections-content.css" />
+  <link rel="stylesheet" href="css/subscription-badges.css" />
+  <link rel="stylesheet" href="css/protection-admin.css" />
+  <link rel="stylesheet" href="css/pdf-viewer.css" />
+  <link rel="stylesheet" href="css/calculator.css" />
+  <link rel="stylesheet" href="css/meme-player.css" />
+  <link rel="stylesheet" href="css/app-mode.css" />
+
+  <!-- ═══════════════════════════════════════════════════════════
+       THIRD-PARTY LIBRARIES (UMD builds — attach to window.*)
+       Loaded as plain scripts, before the type="module" app script,
+       so their globals (window.supabase, window.DOMPurify,
+       window.pdfjsLib) are guaranteed to exist by the time js/main.js
+       runs (module scripts are always deferred until after the
+       document has been parsed).
+  ═══════════════════════════════════════════════════════════ -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <!-- DOMPurify: sanitizes any HTML from the database before injecting into the DOM -->
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+  <!-- PDF.js: canvas-based PDF renderer — prevents raw binary extraction via DOM inspection -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <!-- pdf-lib: used only by the admin panel, to rebuild a compressed PDF before upload
+       (window.PDFLib) — see js/pdfCompressor.js -->
+  <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     AUTH SCREEN
+═══════════════════════════════════════════════════════════════ -->
+<div id="auth-screen" class="auth-screen">
+  <!-- Login / Signup card -->
+  <div id="auth-card-main" class="auth-card">
+    <div class="auth-header">
+      <div class="auth-logo is-image"><img id="auth-logo-img" alt="ENS Advantage" /></div>
+      <div style="font-size:1.35rem;font-weight:800;margin-bottom:.3rem;">ENS Advantage</div>
+      <div style="font-size:.85rem;color:#94a3b8;">Exclusive academic platform for ENS English students</div>
+    </div>
+    <div class="auth-tabs">
+      <button id="tab-login" class="auth-tab active" onclick="App.Auth.switchMode('login')">Sign In</button>
+      <button id="tab-signup" class="auth-tab" onclick="App.Auth.switchMode('signup')">Create Account</button>
+    </div>
+    <div class="auth-body">
+      <!-- LOGIN FORM -->
+      <div id="form-login">
+        <div class="form-group">
+          <label class="form-label">Email Address</label>
+          <input class="form-input" type="email" id="login-email" placeholder="student@ens.dz" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Password</label>
+          <div class="password-field">
+            <input class="form-input" type="password" id="login-password" placeholder="••••••••" />
+            <button type="button" class="password-toggle-btn" aria-label="Show password" onclick="App.Auth.togglePasswordVisibility(this,'login-password')">
+              <svg class="icon-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg class="icon-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><path d="M6.61 6.61A18.5 18.5 0 0 0 1 12s4 8 11 8a9.26 9.26 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
+            </button>
+          </div>
+          <div style="text-align:right;margin-top:.35rem;">
+            <button type="button" onclick="App.Auth.showForgotPassword()" style="background:none;border:none;color:var(--accent);font-size:.78rem;font-weight:600;cursor:pointer;padding:0;font-family:inherit;">Forgot password?</button>
+          </div>
+        </div>
+        <div id="login-error" class="error-msg hidden"></div>
+        <button class="btn-primary" onclick="App.Auth.login()">→ Access My Account</button>
+        <button type="button" class="btn-secondary" style="margin-top:.75rem;" onclick="App.Auth.switchMode('signup')">New here? Create an account</button>
+      </div>
+      <!-- SIGNUP FORM -->
+      <div id="form-signup" class="hidden">
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">First Name</label>
+            <input class="form-input" type="text" id="signup-firstName" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Last Name</label>
+            <input class="form-input" type="text" id="signup-lastName" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Date of Birth</label>
+          <input class="form-input" type="date" id="signup-dob" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email Address</label>
+          <input class="form-input" type="email" id="signup-email" placeholder="student@ens.dz" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Password</label>
+          <div class="password-field">
+            <input class="form-input" type="password" id="signup-password" placeholder="Min. 8 characters" />
+            <button type="button" class="password-toggle-btn" aria-label="Show password" onclick="App.Auth.togglePasswordVisibility(this,'signup-password')">
+              <svg class="icon-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg class="icon-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><path d="M6.61 6.61A18.5 18.5 0 0 0 1 12s4 8 11 8a9.26 9.26 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
+            </button>
+          </div>
+        </div>
+        <div id="signup-error" class="error-msg hidden"></div>
+        <button class="btn-primary" style="background:var(--navy);" onclick="App.Auth.signup()">→ Create Account</button>
+        <div style="font-size:.72rem;color:#94a3b8;text-align:center;margin-top:.6rem;line-height:1.5;">
+          By creating an account, you agree to our
+          <a href="/terms.html" target="_blank" style="color:#93c5fd;">Terms of Service</a>
+          and
+          <a href="/privacy.html" target="_blank" style="color:#93c5fd;">Privacy Policy</a>.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Forgot Password card -->
+  <div id="auth-card-forgot" class="auth-card auth-card-narrow hidden">
+    <div class="auth-header">
+      <div class="auth-logo">🔑</div>
+      <div style="font-size:1.2rem;font-weight:800;margin-bottom:.25rem;">Reset Password</div>
+      <div style="font-size:.85rem;color:#94a3b8;">Enter your email to receive a 6-digit reset code</div>
+    </div>
+    <div class="auth-body">
+      <div class="form-group">
+        <label class="form-label">Email Address</label>
+        <input class="form-input" type="email" id="forgot-email" placeholder="student@ens.dz" oninput="$('forgot-error')?.classList.add('hidden')" />
+      </div>
+      <div id="forgot-error" class="error-msg hidden"></div>
+      <button class="btn-primary" onclick="App.Auth.forgotPassword()">→ Send Reset Code</button>
+      <button type="button" class="btn-secondary" style="margin-top:.5rem;" onclick="App.Auth.backToLogin()">← Back to Sign In</button>
+    </div>
+  </div>
+
+  <!-- Set New Password card (shown after reset code is sent) -->
+  <div id="auth-card-new-password" class="auth-card auth-card-narrow hidden">
+    <div class="auth-header">
+      <div class="auth-logo">🔒</div>
+      <div style="font-size:1.2rem;font-weight:800;margin-bottom:.25rem;">Set New Password</div>
+      <div id="reset-email-display" style="font-size:.83rem;color:#94a3b8;">Enter the code sent to your email</div>
+    </div>
+    <div class="auth-body">
+      <div class="spam-alert">
+        <span class="spam-alert-icon">⚠</span>
+        <span class="spam-alert-text">Don't see it? <strong>Check your SPAM / Junk folder!</strong></span>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Reset Code</label>
+        <input class="form-input" type="text" id="reset-code" maxlength="6" placeholder="6-digit code" inputmode="numeric" oninput="$('new-password-error')?.classList.add('hidden')" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">New Password</label>
+        <div class="password-field">
+          <input class="form-input" type="password" id="new-password" placeholder="Min. 8 characters" oninput="$('new-password-error')?.classList.add('hidden')" />
+          <button type="button" class="password-toggle-btn" aria-label="Show password" onclick="App.Auth.togglePasswordVisibility(this,'new-password')">
+            <svg class="icon-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg class="icon-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><path d="M6.61 6.61A18.5 18.5 0 0 0 1 12s4 8 11 8a9.26 9.26 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Confirm New Password</label>
+        <div class="password-field">
+          <input class="form-input" type="password" id="confirm-password" placeholder="Repeat your password" oninput="$('new-password-error')?.classList.add('hidden')" />
+          <button type="button" class="password-toggle-btn" aria-label="Show password" onclick="App.Auth.togglePasswordVisibility(this,'confirm-password')">
+            <svg class="icon-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg class="icon-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><path d="M6.61 6.61A18.5 18.5 0 0 0 1 12s4 8 11 8a9.26 9.26 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
+          </button>
+        </div>
+      </div>
+      <div id="new-password-error" class="error-msg hidden"></div>
+      <button class="btn-primary" onclick="App.Auth.resetPassword()">→ Reset Password</button>
+      <button type="button" class="btn-secondary" style="margin-top:.5rem;" onclick="App.Auth.backToLogin()">← Back to Sign In</button>
+    </div>
+  </div>
+
+  <!-- OTP Verification card -->
+  <div id="auth-card-otp" class="auth-card auth-card-narrow hidden">
+    <div class="auth-header">
+      <div class="auth-logo">✉</div>
+      <div style="font-size:1.2rem;font-weight:800;margin-bottom:.25rem;">Check Your Email</div>
+      <div style="font-size:.85rem;color:#94a3b8;">Email verification required</div>
+    </div>
+    <div class="auth-body">
+      <div class="otp-note">
+        A verification code has been sent to <strong id="otp-email-display"></strong>.
+      </div>
+      <div class="spam-alert">
+        <span class="spam-alert-icon">⚠</span>
+        <span class="spam-alert-text">Don't see it? <strong>Check your SPAM / Junk folder!</strong></span>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Verification Code</label>
+        <input class="form-input" type="text" id="otp-input" maxlength="6" placeholder="Enter 6-digit code" inputmode="numeric" oninput="App.Auth.clearOtpError()" />
+      </div>
+      <div id="otp-error" class="error-msg hidden"></div>
+      <button class="btn-primary" onclick="App.Auth.verifyOtp()">✓ Verify Account</button>
+      <button type="button" class="btn-secondary" style="margin-top:.5rem;" onclick="App.Auth.resendOtp()">↻ Resend Code</button>
+      <div id="resend-msg" style="display:none;text-align:center;font-size:.8rem;color:var(--green);margin-top:.5rem;padding:.4rem;background:var(--green-light);border-radius:var(--radius-sm);">Code resent! Check your inbox.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     MAIN APP (hidden until logged in + verified)
+═══════════════════════════════════════════════════════════════ -->
+<div id="main-app" class="hidden">
+
+  <!-- HEADER -->
+  <header class="site-header" data-app-order="header">
+    <div class="header-inner">
+      <a class="header-logo" href="#top">
+        <img src="assets/logo.jpg" alt="ENS Advantage" />
+      </a>
+      <div class="header-center">
+        <button id="premium-btn" class="subscription-btn hidden" onclick="App.Subscription.open(undefined)"><span>⚡ Go Premium</span></button>
+        <div id="elite-badge" class="elite-badge hidden">👑 <span>Elite Member</span></div>
+        <div id="partial-badge" class="partial-badge hidden"><span class="partial-badge-ring"></span><span id="partial-badge-text">S1 Active</span></div>
+      </div>
+      <div class="header-right">
+        <div class="user-chip" id="user-chip" onclick="App.UI.toggleDropdown()">
+          <div class="user-avatar" id="user-avatar-initials">?</div>
+          <span id="user-first-name" style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+          <span style="font-size:.75rem;">▾</span>
+          <div class="user-dropdown hidden" id="user-dropdown">
+            <div class="dropdown-info">
+              <div class="dropdown-name" id="dd-name"></div>
+              <div class="dropdown-email" id="dd-email"></div>
+              <div class="dropdown-badges" id="dd-badges"></div>
+            </div>
+            <button class="admin-dropdown-btn hidden" id="admin-dropdown-btn" onclick="App.AdminPanel.open()">📤 رفع درس جديد</button>
+            <button class="meme-admin-dropdown-btn hidden" id="meme-admin-dropdown-btn" onclick="App.MemeAdmin.open()">🎭 إدارة الميمات</button>
+            <button class="dropdown-btn" onclick="App.Auth.logout()">⎋ Sign Out</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- HERO -->
+  <section class="hero" id="top" data-app-order="hero">
+    <div class="hero-inner">
+      <div class="hero-eyebrow reveal">🎓 École Normale Supérieure · English Department</div>
+      <h1 class="hero-title reveal" style="animation-delay: 0.1s;">Your Academic Edge at<br/><span>ENS Advantage</span></h1>
+      <p class="hero-subtitle reveal" style="animation-delay: 0.2s;">Everything you need for first-year English studies — summaries, full lessons, and strategic guides — all in one place.</p>
+      
+      <div class="hero-actions reveal" style="animation-delay: 0.3s;">
+        <button class="btn-hero-primary" onclick="document.querySelector('.section').scrollIntoView({behavior: 'smooth'})">Explore Curriculum</button>
+        <button class="btn-hero-secondary" onclick="App.Subscription.open(1)">⚡ Go Premium</button>
+      </div>
+
+      <div class="hero-grid">
+        <div class="intro-card reveal-left" style="animation-delay: 0.4s;">
+          <div class="intro-card-label">About This Platform</div>
+          <p>"This website was created specifically to support you in your university journey and save you valuable time and effort. I have gathered everything you need right here: comprehensive summaries and lessons for all modules across both the first and second semesters. You will also find practical guidance to help you achieve top marks and avoid the pitfalls my classmates and I faced last year."</p>
+          <div style="margin-top: 1rem; font-size: .9rem; font-weight: 700; color: #93c5fd; text-align: right;">— Rahal ABDELMALEK</div>
+        </div>
+        <div class="intro-card rtl reveal-right" style="animation-delay: 0.4s;">
+          <div class="intro-card-label font-arabic">عن المنصة</div>
+          <p class="font-arabic">"تم تصميم هذا الموقع خصيصاً لدعمكم في مساركم الجامعي وتوفير وقتكم وجهدكم. جمعت لكم هنا كل ما تحتاجونه من ملخصات ودروس شاملة لجميع مقاييس السداسيين الأول والثاني. كما أشارككم توجيهات عملية لتحقيق أعلى العلامات، وتجنب الأخطاء التي مررت بها أنا وزملائي في السنة الماضية."</p>
+          <div class="font-arabic" style="margin-top: 1rem; font-size: .95rem; font-weight: 700; color: #93c5fd; text-align: left;" dir="rtl">— رحال عبد المالك</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- GRADING SYSTEM -->
+  <section style="padding:4rem 1.5rem;background:white;" data-app-order="grading">
+    <div style="max-width:1200px;margin:0 auto;">
+      <div style="text-align:center;margin-bottom:2.5rem;" class="reveal">
+        <h2 class="section-title font-arabic" dir="rtl">نظام المدرسة العليا للأساتذة</h2>
+        <p class="section-sub" style="margin-bottom:0;">ENS Grading System — Formulas &amp; Calculation Methods</p>
+      </div>
+      <p style="text-align:right;font-size:.95rem;font-weight:700;color:var(--slate-700);margin-bottom:1.25rem;font-family:'Cairo',sans-serif;" class="font-arabic reveal" dir="rtl">المعدلات :</p>
+      <div class="grading-grid">
+        <div class="grading-card reveal" style="animation-delay: 0.1s;">
+          <div class="grading-icon" style="background:#dbeafe;color:var(--accent);">🧮</div>
+          <h3 class="grading-card-title font-arabic" dir="rtl">طريقة حساب معدل أي مقياس :</h3>
+          <ul class="bullet-list" dir="rtl">
+            <li><span class="bullet-dot" style="flex-shrink:0;margin-top:.4rem;"></span><span class="font-arabic">نقطة ال TD تمثل 33% من معدل المقياس</span></li>
+            <li><span class="bullet-dot" style="flex-shrink:0;margin-top:.4rem;"></span><span class="font-arabic">نقطة ال EXAM تمثل 67% من معدل المقياس</span></li>
+          </ul>
+          <div class="formula-box">(TD × 0.33) + (EXAM × 0.67) = <span class="font-arabic">معدل المقياس</span></div>
+        </div>
+        <div class="grading-card reveal" style="animation-delay: 0.2s;">
+          <div class="grading-icon" style="background:#ede9fe;color:var(--purple);">📐</div>
+          <h3 class="grading-card-title font-arabic" dir="rtl">طريقة حساب معدل الوحدة :</h3>
+          <p class="font-arabic" style="font-size:.875rem;color:var(--slate-600);line-height:1.8;" dir="rtl">
+            كل معدل مقياس يضرب في معامله ويتم جمع النتائج ثم قسمتها على مجموع معاملات الوحدة.
+          </p>
+          <div class="formula-box">Σ(Module avg × Coef) ÷ Σ(Coef)</div>
+        </div>
+        <div class="grading-card reveal" style="animation-delay: 0.3s;">
+          <div class="grading-icon" style="background:#dcfce7;color:var(--green);">📊</div>
+          <h3 class="grading-card-title font-arabic" dir="rtl">طريقة حساب معدل السداسي :</h3>
+          <p class="font-arabic" style="font-size:.875rem;color:var(--slate-600);line-height:1.8;" dir="rtl">
+            يتم ضرب جميع معدلات المقاييس لذلك السداسي في معاملاتها وجمع النتائج، ثم القسمة على مجموع المعاملات لتلك المقاييس.
+          </p>
+        </div>
+        <div class="grading-card reveal" style="animation-delay: 0.4s;">
+          <div class="grading-icon" style="background:#ffedd5;color:var(--orange);">📅</div>
+          <h3 class="grading-card-title font-arabic" dir="rtl">طريقة حساب المعدل السنوي :</h3>
+          <div class="formula-box"><span class="font-arabic">(معدل السداسي 1 + معدل السداسي 2) ÷ 2</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- GRADE CALCULATOR -->
+  <section class="calc-section-bg" data-app-order="calculator">
+    <div style="max-width:900px;margin:0 auto;">
+      <!-- Official catch-up (استدراك) rules are now explained inline,
+           attached to each student's own calculated result (see
+           calc-official-note in js/calc.js) — not as a separate static
+           text block, since that isn't personalized/actionable. -->
+      <div class="calc-header-block">
+        <h2 class="section-title">Grade Calculator &mdash; <span style="font-family:'Cairo',sans-serif;font-size:1.4rem;">حساب المعدل</span></h2>
+        <p class="section-sub" style="margin-bottom:0;">&#x623;&#x62F;&#x62E;&#x644; &#x639;&#x644;&#x627;&#x645;&#x629; TD &#x648;&#x639;&#x644;&#x627;&#x645;&#x629; Exam &#x644;&#x643;&#x644; &#x645;&#x642;&#x64A;&#x627;&#x633; &#x648;&#x633;&#x64A;&#x62A;&#x645; &#x627;&#x62D;&#x62A;&#x633;&#x627;&#x628; &#x627;&#x644;&#x645;&#x639;&#x62F;&#x644; &#x62A;&#x644;&#x642;&#x627;&#x626;&#x64A;&#x64B;&#x627;</p>
+      </div>
+      <!-- Semester Tabs -->
+      <div class="tabs" style="max-width:380px;margin:0 auto 1.5rem;" id="calc-tabs">
+        <button id="calc-tab-1" class="tab-btn active" onclick="App.Calc.switchSem(1)">Semester 1</button>
+        <button id="calc-tab-2" class="tab-btn" onclick="App.Calc.switchSem(2)">Semester 2</button>
+      </div>
+      <!-- Dynamic content -->
+      <div id="calc-body"></div>
+    </div>
+  </section>
+
+  <!-- CURRICULUM -->
+  <section class="section" data-app-order="curriculum">
+    <h2 class="section-title reveal">Core Curriculum</h2>
+    <p class="section-sub reveal" style="animation-delay: 0.1s;">All modules across both semesters — summaries, full lessons, and strategic guides</p>
+
+    <div class="tabs reveal" style="animation-delay: 0.2s;">
+      <button id="sem-tab-1" class="tab-btn active" onclick="App.Modules.switchSemester(1)">Semester 1</button>
+      <button id="sem-tab-2" class="tab-btn" onclick="App.Modules.switchSemester(2)">Semester 2</button>
+    </div>
+
+    <div id="premium-notice" class="reveal" style="background:linear-gradient(135deg,#fef3c7 0%,#fde68a 100%);border:1px solid #f59e0b;border-radius:var(--radius-md);padding:.85rem 1.1rem;margin-bottom:1.25rem;display:flex;align-items:center;gap:.75rem;font-size:.875rem;color:#92400e;animation-delay: 0.3s;">
+      <span style="font-size:1.1rem;">🔐</span>
+      <span><strong>Free access:</strong> Summaries and guides are open. Full Lessons require Semester <span id="notice-sem">1</span> Premium.</span>
+      <button id="notice-unlock-btn" onclick="App.Subscription.open(1)" style="margin-left:auto;padding:.35rem .8rem;background:#f59e0b;color:white;border:none;border-radius:var(--radius-sm);font-weight:700;cursor:pointer;font-size:.8rem;white-space:nowrap;font-family:'Inter',sans-serif;">Unlock →</button>
+    </div>
+
+    <div class="module-list" id="module-list"></div>
+  </section>
+
+  <!-- PREMIUM COMMUNITY -->
+  <section class="section" style="padding-top:1rem;" data-app-order="community">
+    <div class="community-section">
+      <div class="community-inner">
+        <div class="reveal-left">
+          <div class="community-tag">⭐ Premium Community</div>
+          <h2 class="community-title">Join the elite circle of ENS students.</h2>
+          <p class="community-sub">Connect, collaborate, and conquer your academic year with features reserved for our most committed students.</p>
+          <ul class="feature-list">
+            <li><span class="feature-check">✓</span><span>Access to verified top-tier student notes from highest scorers</span></li>
+            <li><span class="feature-check">✓</span><span>Weekly collaborative exam group reviews with structured sessions</span></li>
+            <li><span class="feature-check">✓</span><span>Peer-to-peer live academic discussion on all modules</span></li>
+            <li><span class="feature-check">✓</span><span>Direct mentorship tips and strategies from senior students</span></li>
+          </ul>
+          <button class="chat-btn" onclick="App.Community.handleChat()">💬 Chat Now on Telegram <span>→</span></button>
+          <p id="community-premium-note" style="color:#94a3b8;font-size:.8rem;margin-top:.6rem;display:none;">Premium subscription required</p>
+        </div>
+        <div class="community-card reveal-right" style="animation-delay: 0.2s;">
+          <div class="comm-visual-strip">
+            <div class="comm-tg-card">
+              <div class="comm-tg-icon-wrap">✈️</div>
+              <div class="comm-tg-info">
+                <div class="comm-tg-name">ENS Advantage Community</div>
+                <div class="comm-tg-desc">Premium Telegram study group</div>
+              </div>
+              <div class="comm-tg-live"><span class="active-dot" style="width:6px;height:6px;margin-right:.3rem;"></span>Live</div>
+            </div>
+            <div class="comm-feats">
+              <div class="comm-feat-pill"><span class="feat-emoji">📝</span>Shared<br>Notes</div>
+              <div class="comm-feat-pill"><span class="feat-emoji">🎯</span>Exam<br>Prep</div>
+              <div class="comm-feat-pill"><span class="feat-emoji">🏅</span>Senior<br>Tips</div>
+              <div class="comm-feat-pill"><span class="feat-emoji">💬</span>Live<br>Chat</div>
+            </div>
+          </div>
+          <div class="community-card-title">Live Academic Discussion</div>
+          <p class="community-card-sub"><span class="active-dot"></span>Active group of ambitious first-year students sharing real-time insights, resources, and exam strategies.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="footer reveal">
+    <div class="footer-logo">ENS Advantage</div>
+    <div class="footer-sub">Exclusive academic platform for first-year English students at École Normale Supérieure</div>
+    <div style="display:flex;justify-content:center;gap:1.5rem;font-size:.8rem;margin-bottom:.5rem;">
+      <span>📍 ENS Algeria</span>
+      <span>🎓 First Year English Dept.</span>
+      <span>🔒 Secure &amp; Private</span>
+    </div>
+    <div style="display:flex;justify-content:center;gap:1.25rem;font-size:.78rem;margin-bottom:.75rem;">
+      <a href="/privacy.html" style="color:var(--slate-400);text-decoration:underline;">Privacy Policy</a>
+      <a href="/terms.html" style="color:var(--slate-400);text-decoration:underline;">Terms of Service</a>
+    </div>
+    <div class="footer-copy" id="footer-year"></div>
+  </footer>
+
+</div><!-- /#main-app -->
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SUBSCRIPTION MODAL
+═══════════════════════════════════════════════════════════════ -->
+<div id="sub-modal" class="modal-overlay hidden" onclick="App.Subscription.handleOverlayClick(event)">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <!-- Success state -->
+    <div id="sub-success" class="success-state hidden">
+      <div class="success-icon">⏳</div>
+      <div class="success-title">Request Submitted!</div>
+      <p class="success-sub">Your payment reference has been received. We'll verify your transaction and activate your access shortly. You'll see the change the next time you open the platform.</p>
+    </div>
+    <!-- Normal state -->
+    <div id="sub-normal">
+      <div class="modal-banner">
+        <span class="modal-banner-icon">⚡</span>
+        <div class="modal-banner-text">
+          <strong>Unlock Premium Access</strong>
+          Full lessons, comprehensive guides, pitfalls to avoid, and Premium Community
+        </div>
+        <button class="modal-close" onclick="App.Subscription.close()" style="margin-left:auto;background:rgba(255,255,255,.15);color:white;flex-shrink:0;">✕</button>
+      </div>
+      <div class="modal-body">
+        <!-- Plan selection -->
+        <div style="margin-bottom:1.25rem;">
+          <div style="font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--slate-500);margin-bottom:.75rem;">Select Your Plan</div>
+          <div id="discount-banner" class="discount-banner hidden">🎉 <strong>New Student Offer</strong> — 40% off your first subscription, any plan!</div>
+          <div id="sub-full-access-notice" class="hidden" style="padding:.75rem 1rem;background:#ecfdf5;color:#065f46;border-radius:var(--radius-sm);font-size:.85rem;font-weight:600;margin-bottom:.75rem;">
+            ✅ You already have full premium access to both semesters — there's nothing left to subscribe to.
+          </div>
+          <div class="plan-grid">
+            <label class="plan-card" id="plan-S1" onclick="App.Subscription.selectPlan('S1')">
+              <div class="plan-check">✓</div>
+              <div style="font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--slate-400);margin-bottom:.35rem;">S1 only</div>
+              <div class="plan-name">Semester 1</div>
+              <span class="plan-price-original hidden" id="price-orig-S1">2,000 DZD</span>
+              <div class="plan-price" id="price-S1">2,000 DZD</div>
+            </label>
+            <label class="plan-card" id="plan-S2" onclick="App.Subscription.selectPlan('S2')">
+              <div class="plan-check">✓</div>
+              <div style="font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--slate-400);margin-bottom:.35rem;">S2 only</div>
+              <div class="plan-name">Semester 2</div>
+              <span class="plan-price-original hidden" id="price-orig-S2">2,000 DZD</span>
+              <div class="plan-price" id="price-S2">2,000 DZD</div>
+            </label>
+            <label class="plan-card" id="plan-BOTH" onclick="App.Subscription.selectPlan('BOTH')">
+              <div class="plan-check">✓</div>
+              <div style="font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--slate-400);margin-bottom:.35rem;">Best value</div>
+              <div class="plan-name">Both Semesters</div>
+              <span class="plan-price-original hidden" id="price-orig-BOTH">3,500 DZD</span>
+              <div class="plan-price" id="price-BOTH">3,500 DZD</div>
+            </label>
+          </div>
+        </div>
+
+        <!-- Payment methods -->
+        <div class="payment-block">
+          <div class="payment-title">Payment Methods</div>
+          <div class="account-row">
+            <div>
+              <div class="account-label">BaridiMob Account</div>
+              <div class="account-num">00799999004271696876</div>
+            </div>
+            <button class="copy-btn" id="copy-baridimob" onclick="App.Subscription.copy('00799999004271696876','baridimob')">📋 Copy</button>
+          </div>
+          <div class="account-row">
+            <div>
+              <div class="account-label">CCP Account</div>
+              <div class="account-num">42716968 / 93</div>
+            </div>
+            <button class="copy-btn" id="copy-ccp" onclick="App.Subscription.copy('42716968 / 93','ccp')">📋 Copy</button>
+          </div>
+          <div style="margin-top:.75rem;padding:.7rem;background:#eff6ff;border-radius:var(--radius-sm);font-size:.8rem;color:#1e40af;">
+            ℹ️ Send exactly <strong id="modal-price">2,000 DZD</strong> and keep your transaction reference number.
+          </div>
+        </div>
+
+        <!-- Transaction form -->
+        <div class="form-group" style="margin-bottom:.5rem;">
+          <div class="field-label">
+            Transaction Number / Reference
+            <div style="position:relative;">
+              <button type="button" class="help-btn" id="help-btn" onclick="App.UI.toggleHelpPopover()">?</button>
+              <div class="help-popover hidden" id="help-popover">
+                <div class="help-popover-section">
+                  <span class="help-popover-label">:BaridiMob</span>
+                  <span class="font-arabic">يتم العثور على معرف المعاملة في تطبيق بريدي موب مباشرة بعد اتمام الدفع ، او عبر خيار اظهار الوصل تحت اسم Transaction ID</span>
+                </div>
+                <div class="help-popover-section" style="margin-bottom:0;">
+                  <span class="help-popover-label">:(CCP) Algeria Post</span>
+                  <span class="font-arabic">يتم استخراج رقم المرجع من الوصل الورقي المسلم من طرف بريد الجزائر ،مذكور تحت تسمية Reference</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <input class="form-input" type="text" id="tx-ref" placeholder="e.g. TXN-2024-XXXXXXXX" oninput="App.Subscription.updateSubmitBtn()" />
+        </div>
+        <button class="submit-btn" id="sub-submit-btn" onclick="App.Subscription.submit()" disabled>✓ Confirm Payment &amp; Activate</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     CONTENT VIEWER OVERLAY
+═══════════════════════════════════════════════════════════════ -->
+<div id="content-overlay" class="content-overlay-bg hidden" onclick="App.Content.close()">
+  <div class="content-viewer" onclick="event.stopPropagation()">
+    <div class="viewer-header">
+      <div>
+        <div class="viewer-title" id="cv-title"></div>
+        <div class="viewer-subtitle" id="cv-subtitle"></div>
+      </div>
+      <button class="viewer-close" onclick="App.Content.close()">✕</button>
+    </div>
+    <div class="viewer-body" id="cv-body">
+      <div class="watermark-layer" id="cv-watermark"></div>
+      <div class="viewer-content" id="cv-content"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     NO-CODE ADMIN UPLOAD PANEL
+     Lets the admin pick semester / module / category, drop a PDF,
+     and have it routed straight into Supabase Storage + the
+     course_materials table via the admin-upload-material Edge
+     Function — no SQL, no Dashboard, no manual steps.
+════════════════════════════════════════════════════════════ -->
+<div id="admin-modal" class="modal-overlay hidden" onclick="App.AdminPanel.handleOverlayClick(event)">
+  <div class="modal-box" onclick="event.stopPropagation()" style="max-width:520px;">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">📤 رفع درس جديد</div>
+        <div class="modal-sub">يُرفع الملف تلقائياً إلى التخزين الآمن ويُسجَّل في قاعدة البيانات</div>
+      </div>
+      <button class="modal-close" onclick="App.AdminPanel.close()">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <div class="form-group">
+        <label class="form-label">الفصل الدراسي</label>
+        <select class="form-select" id="admin-semester" onchange="App.AdminPanel.onSemesterChange()">
+          <option value="1">الفصل الأول (S1)</option>
+          <option value="2">الفصل الثاني (S2)</option>
+          <option value="both" id="admin-semester-both-option" class="hidden">كلا الفصلين (S1 + S2)</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">المادة / الوحدة</label>
+        <select class="form-select" id="admin-module" onchange="App.AdminPanel.onModuleChange()"></select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">نوع المحتوى</label>
+        <select class="form-select" id="admin-category" onchange="App.AdminPanel.onCategoryChange()">
+          <option value="summary">ملخص مجاني (Summary)</option>
+          <option value="full_lesson">الدرس الكامل (Full Lesson)</option>
+          <option value="guide">الدليل الشامل (Guide)</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">العنوان (اختياري)</label>
+        <input class="form-input" id="admin-title" type="text" placeholder="سيُولَّد تلقائياً إن تُرك فارغاً">
+      </div>
+
+      <!-- PDF upload path — used for Summary + Full Lesson -->
+      <div class="form-group" id="admin-pdf-fields">
+        <label class="form-label">ملف PDF</label>
+        <div class="admin-file-drop" id="admin-file-drop">
+          <input type="file" id="admin-file-input" accept="application/pdf"
+                 onchange="App.AdminPanel.onFileSelected(event)">
+          <div class="admin-file-drop-icon">📄</div>
+          <div class="admin-file-drop-text" id="admin-file-drop-text">اضغط لاختيار ملف PDF أو اسحبه هنا</div>
+          <div class="admin-file-drop-name hidden" id="admin-file-name"></div>
+        </div>
+      </div>
+
+      <!-- Text + images path — used for the Comprehensive Guide, opens
+           as a plain scrollable window rather than the PDF viewer -->
+      <div class="form-group hidden" id="admin-guide-fields">
+
+        <!-- Shows what's already live for the selected module/semester,
+             and lets the admin pull it into the editor below instead of
+             blindly appending/overwriting. Hidden for "both semesters"
+             (editing needs one specific existing row to load). -->
+        <div id="admin-guide-current" class="hidden"
+             style="margin-bottom:.9rem;padding:.7rem .8rem;background:var(--slate-50,#f8fafc);border:1px solid var(--slate-200,#e2e8f0);border-radius:8px;font-size:.8rem;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;">
+            <strong>المحتوى الحالي لهذه المادة</strong>
+            <button type="button" id="admin-guide-load-edit-btn" onclick="App.AdminPanel.loadGuideForEditing()"
+                    style="border:1px solid var(--slate-300,#cbd5e1);background:#fff;border-radius:6px;padding:.25rem .6rem;font-size:.75rem;cursor:pointer;white-space:nowrap;">
+              تحميل للتعديل ✏️
+            </button>
+          </div>
+          <div id="admin-guide-current-status" style="color:var(--slate-500,#64748b);margin-top:.3rem;">—</div>
+          <div id="admin-guide-current-images" style="display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.5rem;"></div>
+        </div>
+
+        <label class="form-label">محتوى الدليل</label>
+        <textarea class="form-input" id="admin-guide-text" rows="8"
+                  placeholder="اكتب هنا محتوى الدليل الشامل — يمكنك إضافة الصور أدناه لتظهر أسفل هذا النص"
+                  style="resize:vertical;font-family:inherit;line-height:1.7;"></textarea>
+
+        <label class="form-label" style="margin-top:.9rem;">الصور (اختياري، يمكن اختيار أكثر من صورة)</label>
+        <div class="admin-file-drop" id="admin-guide-images-drop">
+          <input type="file" id="admin-guide-images-input" accept="image/png,image/jpeg,image/webp,image/gif" multiple
+                 onchange="App.AdminPanel.onGuideImagesSelected(event)">
+          <div class="admin-file-drop-icon">🖼️</div>
+          <div class="admin-file-drop-text" id="admin-guide-images-text">اضغط لاختيار صورة أو أكثر</div>
+        </div>
+        <div id="admin-guide-images-preview" style="display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.6rem;"></div>
+
+        <div style="display:flex;flex-direction:column;gap:.45rem;margin-top:.9rem;font-size:.85rem;">
+          <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;">
+            <input type="radio" name="admin-guide-mode" id="admin-guide-mode-append" value="append" checked
+                   onchange="App.AdminPanel.onGuideModeChange()" style="width:auto;">
+            إضافة أسفل المحتوى الحالي
+          </label>
+          <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;">
+            <input type="radio" name="admin-guide-mode" id="admin-guide-mode-replace" value="replace"
+                   onchange="App.AdminPanel.onGuideModeChange()" style="width:auto;">
+            استبدال المحتوى بالكامل (حذف القديم كله)
+          </label>
+          <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;">
+            <input type="radio" name="admin-guide-mode" id="admin-guide-mode-edit" value="edit"
+                   onchange="App.AdminPanel.onGuideModeChange()" style="width:auto;">
+            تعديل المحتوى الحالي (تحرير النص + اختيار الصور المُبقاة)
+          </label>
+        </div>
+        <div style="font-size:.75rem;color:var(--slate-400,#94a3b8);margin-top:.35rem;" id="admin-guide-mode-hint">
+          الوضع الافتراضي: إضافة النص والصور الجديدة أسفل ما تم رفعه سابقاً لهذه المادة (دون حذفه).
+        </div>
+      </div>
+
+      <button class="admin-submit-btn" id="admin-submit-btn" onclick="App.AdminPanel.upload()">
+        رفع الملف الآن
+      </button>
+
+      <div class="admin-status-bar" id="admin-status-bar">
+        <span class="admin-spinner hidden" id="admin-status-spinner"></span>
+        <span id="admin-status-text"></span>
+      </div>
+
+      <div class="admin-existing-list" id="admin-existing-list"></div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     SECURE PDF VIEWER OVERLAY
+     Renders PDFs on <canvas> via PDF.js. No browser toolbar.
+     No download option. No embed/object tag. Content never
+     touches the DOM as a raw binary — only as painted pixels.
+════════════════════════════════════════════════════════════ -->
+<div id="pdf-overlay" class="pdf-overlay-bg hidden" role="dialog" aria-modal="true" aria-label="Document Viewer">
+  <div class="pdf-viewer-shell">
+
+    <!-- ── Top toolbar ───────────────────────────────────── -->
+    <div class="pdf-toolbar">
+      <div class="pdf-title-block">
+        <div class="pdf-doc-name" id="pdf-doc-name">Loading…</div>
+        <div class="pdf-doc-type" id="pdf-doc-type"></div>
+      </div>
+
+      <!-- Page navigation -->
+      <div class="pdf-nav-group">
+        <button class="pdf-nav-btn" id="pdf-btn-prev"
+                onclick="App.PDFViewer.prevPage()" title="Previous page" disabled>&#9664;</button>
+        <span class="pdf-page-input-group">
+          <input type="number" id="pdf-page-input" class="pdf-page-input"
+                 min="1" step="1" inputmode="numeric" disabled
+                 title="Go to page"
+                 onfocus="this.select()"
+                 onkeydown="if(event.key==='Enter'){this.blur();}"
+                 onchange="App.PDFViewer.gotoPageInput(this.value)" />
+          <span class="pdf-page-total">/ <span id="pdf-page-total-num">—</span></span>
+        </span>
+        <button class="pdf-nav-btn" id="pdf-btn-next"
+                onclick="App.PDFViewer.nextPage()" title="Next page" disabled>&#9654;</button>
+      </div>
+
+      <!-- Zoom controls -->
+      <div class="pdf-zoom-group">
+        <button class="pdf-nav-btn" id="pdf-btn-zout"
+                onclick="App.PDFViewer.zoom(-1)" title="Zoom out">−</button>
+        <span class="pdf-page-pill" id="pdf-zoom-label">100%</span>
+        <button class="pdf-nav-btn" id="pdf-btn-zin"
+                onclick="App.PDFViewer.zoom(+1)" title="Zoom in">+</button>
+      </div>
+
+      <button class="pdf-close-btn" onclick="App.PDFViewer.close()" title="Close viewer">✕</button>
+    </div>
+
+    <!-- ── Scrollable canvas zone ─────────────────────────── -->
+    <div class="pdf-canvas-zone" id="pdf-canvas-zone">
+
+      <!-- Skeleton shown while fetching signed URL / loading PDF -->
+      <div class="pdf-skeleton-zone" id="pdf-skeleton">
+        <div class="pdf-skel-bar" style="width:min(620px,100%);height:840px;"></div>
+      </div>
+
+      <!-- Error state -->
+      <div class="pdf-error-zone hidden" id="pdf-error">
+        <div class="pdf-err-icon">⚠️</div>
+        <div class="pdf-err-msg" id="pdf-err-msg">Could not load document. Please try again.</div>
+        <button style="margin-top:.5rem;padding:.55rem 1.4rem;border:1px solid rgba(255,255,255,.15);
+                background:rgba(255,255,255,.07);color:#94a3b8;border-radius:8px;cursor:pointer;font-size:.85rem;"
+                onclick="App.PDFViewer.close()">Close</button>
+      </div>
+
+      <!-- Pages container (hidden until PDF is rendered) — populated
+           dynamically with one wrapper+canvas+watermark per page for
+           continuous vertical scroll. See PDFViewer._buildPages(). -->
+      <div class="pdf-pages-container hidden" id="pdf-pages-container" oncontextmenu="return false;"></div>
+
+    </div><!-- /pdf-canvas-zone -->
+
+    <!-- ── Security notice strip ─────────────────────────── -->
+    <div class="pdf-security-strip">
+      🔒&nbsp; Content is protected &amp; watermarked — distribution is strictly prohibited
+    </div>
+
+  </div><!-- /pdf-viewer-shell -->
+</div><!-- /pdf-overlay -->
+
+<!-- PROTECTION TOAST -->
+<div id="protection-toast" class="protection-toast hidden">🚫 Print / Save is disabled for protected content.</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     MEME ADMIN MODAL
+     Lets the admin upload/toggle/delete memes per GPA bracket.
+     No student data ever enters this UI — it only manages meme assets.
+═══════════════════════════════════════════════════════════ -->
+<div id="meme-admin-modal" class="modal-overlay hidden" onclick="App.MemeAdmin.handleOverlayClick(event)">
+  <div class="modal-box meme-admin-modal-box" style="max-width:660px;">
+
+    <!-- Header -->
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">🎭 إدارة الميمات</div>
+        <div class="modal-subtitle">رفع وإدارة الميمات لكل فئة من فئات المعدل</div>
+      </div>
+      <button class="modal-close-btn" onclick="App.MemeAdmin.close()">✕</button>
+    </div>
+
+    <!-- Upload form -->
+    <div class="meme-upload-section">
+      <div class="meme-upload-section-title">⬆️ رفع ميم جديد</div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.65rem;margin-bottom:.65rem;">
+        <!-- Category select -->
+        <div>
+          <label class="modal-label" for="meme-upload-category">الفئة</label>
+          <select id="meme-upload-category" class="modal-input" style="cursor:pointer;">
+            <option value="cat_below_8">😱 أقل من 8.00</option>
+            <option value="cat_8_to_9_50">😬 8.00 – 9.50</option>
+            <option value="cat_9_51_to_9_99">😅 9.51 – 9.99</option>
+            <option value="cat_10_to_10_50">😌 10.00 – 10.50</option>
+            <option value="cat_10_51_to_12">😊 10.51 – 12.00</option>
+            <option value="cat_12_01_to_13_50">👍 12.01 – 13.50</option>
+            <option value="cat_13_51_to_14_99">✨ 13.51 – 14.99</option>
+            <option value="cat_15_to_15_99">🏆 15.00 – 15.99</option>
+            <option value="cat_16_plus">🎓 16.00 فأكثر</option>
+          </select>
+        </div>
+        <!-- Optional title -->
+        <div>
+          <label class="modal-label" for="meme-upload-title">عنوان (اختياري)</label>
+          <input id="meme-upload-title" class="modal-input" type="text"
+                 placeholder="اسم مضحك للميم…" maxlength="80" />
+        </div>
+      </div>
+
+      <!-- File drop area -->
+      <div class="meme-file-drop" id="meme-file-drop"
+           ondragover="event.preventDefault();this.classList.add('drag-over')"
+           ondragleave="this.classList.remove('drag-over')"
+           ondrop="event.preventDefault();this.classList.remove('drag-over');App.MemeAdmin.onFileSelected({target:{files:event.dataTransfer.files}})">
+        <input type="file" id="meme-file-input"
+               accept="video/mp4,video/webm,image/gif"
+               onchange="App.MemeAdmin.onFileSelected(event)" />
+        <div class="meme-file-drop-icon">🎬</div>
+        <div id="meme-file-drop-text" class="meme-file-drop-text">اضغط لاختيار ملف MP4 / WebM / GIF أو اسحبه هنا</div>
+        <div id="meme-file-name" class="meme-file-drop-name hidden"></div>
+      </div>
+
+      <button id="meme-upload-btn" class="meme-upload-btn" onclick="App.MemeAdmin.upload()">
+        ⬆️ رفع الميم
+      </button>
+
+      <!-- Status bar -->
+      <div id="meme-status-bar" class="meme-status-bar">
+        <span id="meme-status-spinner" class="hidden" style="display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0;"></span>
+        <span id="meme-status-text"></span>
+      </div>
+    </div>
+
+    <!-- Category tabs + meme grid -->
+    <div class="meme-cat-tabs-wrap">
+      <div id="meme-cat-tabs" class="meme-cat-tabs">
+        <!-- Rendered by MemeAdmin._renderCategoryTabs() -->
+      </div>
+    </div>
+
+    <div id="meme-admin-grid" class="meme-admin-grid">
+      <!-- Rendered by MemeAdmin._renderMemeGrid() -->
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     APP LOGIC
+     Single ES module entry point — imports every feature module
+     (js/*.js). See js/main.js for the full module map.
+═══════════════════════════════════════════════════════════ -->
+<script type="module" src="js/main.js"></script>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     No service worker here — this copy is bundled locally inside
+     the native app (see mobile-app/capacitor.config.json, no
+     `server.url`), so there's no network round trip for a service
+     worker to intercept. That's a browser-PWA concept and belongs
+     only in the root site's index.html.
+═══════════════════════════════════════════════════════════════ -->
+
+</body>
+</html>

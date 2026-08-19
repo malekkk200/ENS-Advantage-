@@ -1,2 +1,7 @@
 node_modules/
-www/
+
+# NOTE: www/ is intentionally NOT ignored. It used to be a generated
+# Capacitor build artifact, but as of the web/app separation it is
+# the real, committed source for the native app — a standalone copy
+# of the frontend, independent from the root website. See the
+# comment at the top of mobile-app/www/index.html for details.

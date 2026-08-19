@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Privacy Policy — ENS Advantage</title>
+<meta name="description" content="Privacy Policy for ENS Advantage — the academic platform for first-year English Department students at ENS Algeria." />
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/icons/icon-32.png" />
+<link rel="stylesheet" href="css/base.css" />
+<link rel="stylesheet" href="css/legal.css" />
+</head>
+<body class="legal-page">
+
+  <div class="legal-topbar">
+    <a class="legal-home" href="/">🎓 ENS Advantage</a>
+    <div class="legal-lang-toggle">
+      <button id="btn-en" class="active" onclick="setLang('en')">English</button>
+      <button id="btn-ar" onclick="setLang('ar')">العربية</button>
+    </div>
+  </div>
+
+  <div class="legal-container">
+
+    <!-- ═══════════════════════════ ENGLISH ═══════════════════════════ -->
+    <div id="content-en">
+      <h1>Privacy Policy</h1>
+      <p class="legal-updated">Last updated: July 23, 2026</p>
+
+      <p>This Privacy Policy explains what information ENS Advantage
+      ("we", "the platform") collects from students who use our
+      website and mobile apps, why we collect it, who we share it
+      with, and what rights you have over it. ENS Advantage is an
+      academic platform for first-year English Department students at
+      École Normale Supérieure (ENS) campuses in Algeria.</p>
+
+      <h2>1. Information We Collect</h2>
+      <p>We collect only what's needed to run your account, verify
+      your subscription, and protect paid course content from
+      unauthorized sharing:</p>
+      <table>
+        <tr><th>Data</th><th>Collected when</th><th>Purpose</th></tr>
+        <tr><td>Email address, password</td><td>Sign-up</td><td>Account identity and login. Your password is stored as a secure hash by our authentication provider (Supabase) — we never see or store it in plain text.</td></tr>
+        <tr><td>First name, last name, date of birth</td><td>Sign-up</td><td>Personalizing your account and displaying your identity in the content-security watermark (see §3).</td></tr>
+        <tr><td>Full name, email, subscription plan, payment reference you submit</td><td>When you request a paid subscription</td><td>Manually verifying and activating your subscription. We do not process card payments or store card details — you send us a payment reference for a transaction made through your own payment method, and an admin verifies it.</td></tr>
+        <tr><td>Device/session identifier, device type (e.g. "Chrome on Windows"), timestamps</td><td>Every time you sign in</td><td>Enforcing the single-device session policy described in §3.</td></tr>
+        <tr><td>IP address, browser/device information, event type</td><td>Certain security-relevant events (login attempts, admin actions, screenshot/recording detection in the mobile apps)</td><td>Account security, fraud prevention, and investigating potential violations of our Terms of Service.</td></tr>
+      </table>
+      <p>We do <strong>not</strong> collect your phone number or precise
+      location — neither is requested anywhere in the app.</p>
+
+      <h2>2. Why We Collect It</h2>
+      <ul>
+        <li>To create and secure your account, and confirm your identity when you sign in.</li>
+        <li>To verify and manage your subscription, and grant access only to the semester(s) you've paid for.</li>
+        <li>To send you account-related emails (OTP verification codes, password resets) via our email provider.</li>
+        <li>To deter and, where possible, identify unauthorized copying or sharing of paid lesson content.</li>
+        <li>To detect and respond to suspicious account activity, including account-sharing and repeated failed logins.</li>
+      </ul>
+      <p>We do not use your data for advertising, and we do not sell
+      your personal data to anyone.</p>
+
+      <h2>3. How We Protect Course Content</h2>
+      <p>Because ENS Advantage is a paid subscription service, we take
+      real (though not absolute — see the honesty note below) steps to
+      protect lesson content from being copied and redistributed:</p>
+      <ul>
+        <li><strong>Watermarking</strong> — every page of premium (paid) lesson content is overlaid with a visible watermark showing your name, email, and the date/time you opened it. This is not extra data collection; it displays information you already gave us, directly on the page, as a deterrent and a way to trace leaked copies back to an account.</li>
+        <li><strong>Single-device session lock</strong> — your account can be signed in on one device at a time. Signing in on a new device automatically signs you out on the previous one.</li>
+        <li><strong>No download option</strong> — lessons are viewed in-app only; there is no button or link to download the underlying files.</li>
+        <li><strong>Mobile app protections</strong> — on Android, the app sets a system-level flag that blocks screenshots and screen recording. On iOS, the app blacks out the screen for the duration of an active screen recording; a single screenshot cannot be technically blocked on iOS by any app (Apple provides no such capability), so instead it is detected and logged to your account for review.</li>
+      </ul>
+      <div class="legal-callout">
+        <strong>Honest limit:</strong> no technology, ours or anyone
+        else's, can stop someone from photographing a screen with a
+        second camera. These measures are designed to deter
+        unauthorized sharing and make it traceable back to an account
+        — not to make it physically impossible. See our
+        <a href="/terms.html">Terms of Service</a> for what happens if
+        a violation is identified.
+      </div>
+
+      <h2>4. Who We Share Data With</h2>
+      <p>We use a small number of service providers to run the
+      platform. Each only receives the data it needs to do its job,
+      and none may use your data for their own purposes:</p>
+      <ul>
+        <li><strong>Supabase</strong> — our database, authentication, file storage, and backend logic provider. All account, subscription, and content data passes through Supabase's infrastructure.</li>
+        <li><strong>Vercel</strong> — hosts the website and serves it to your browser/app.</li>
+        <li><strong>Brevo</strong> — sends transactional emails on our behalf (sign-up verification codes and password-reset emails). Brevo receives your email address for this purpose only.</li>
+        <li><strong>Cloudflare</strong> — configured for future use as a security/CDN layer once the platform moves to a custom domain. It is not currently in the request path for <code>ens-advantage.vercel.app</code> and does not currently process your data.</li>
+      </ul>
+      <p>We do not share your data with advertisers, data brokers, or
+      any party outside the list above, except where required by law.</p>
+
+      <h2>5. Data Retention</h2>
+      <p>We keep your account data for as long as your account is
+      active. Security event logs are retained for a limited period to
+      support fraud/abuse investigation, after which they may be
+      deleted or aggregated.</p>
+
+      <h2>6. Your Rights</h2>
+      <ul>
+        <li><strong>Access</strong> — you can request a copy of the personal data we hold about you.</li>
+        <li><strong>Correction</strong> — you can ask us to correct inaccurate account information.</li>
+        <li><strong>Deletion</strong> — you can request that your account and associated personal data be deleted. We will action this within a reasonable time, except for records we're required to keep for legal or security purposes (e.g. a security log tied to a confirmed Terms of Service violation).</li>
+      </ul>
+      <p>To exercise any of these rights, contact us using the details in §8.</p>
+
+      <h2>7. Children's Privacy</h2>
+      <p>ENS Advantage is built for university-level (first-year
+      higher-education) students and is not directed at children under
+      13.</p>
+
+      <h2>8. Contact & Changes to This Policy</h2>
+      <p>We may update this Privacy Policy from time to time; the
+      "Last updated" date above will reflect the latest revision.
+      For any privacy question, data request, or concern, contact the
+      platform administrator through the support channel listed in the
+      app, or by email at the address associated with the platform.</p>
+
+      <div class="legal-contact">
+        Related: <a href="/terms.html">Terms of Service &amp; Anti-Piracy Agreement</a>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════ ARABIC ═══════════════════════════ -->
+    <div id="content-ar" dir="rtl" lang="ar">
+      <h1>سياسة الخصوصية</h1>
+      <p class="legal-updated">آخر تحديث: 23 يوليو 2026</p>
+
+      <p>توضّح سياسة الخصوصية هذه المعلومات التي تجمعها منصة ENS
+      Advantage ("نحن"، "المنصة") من الطلبة الذين يستخدمون موقعنا
+      وتطبيقاتنا، وأسباب جمعها، والجهات التي نشاركها معها، والحقوق
+      التي تملكونها تجاهها. منصة ENS Advantage هي منصة أكاديمية
+      مخصّصة لطلبة السنة الأولى بقسم اللغة الإنجليزية في المدرسة
+      العليا للأساتذة (ENS) بالجزائر.</p>
+
+      <h2>1. المعلومات التي نجمعها</h2>
+      <p>نجمع فقط ما هو ضروري لإدارة حسابك، والتحقق من اشتراكك،
+      وحماية محتوى الدروس المدفوعة من المشاركة غير المصرّح بها:</p>
+      <table>
+        <tr><th>البيانات</th><th>وقت الجمع</th><th>الغرض</th></tr>
+        <tr><td>البريد الإلكتروني، كلمة المرور</td><td>عند التسجيل</td><td>هوية الحساب وتسجيل الدخول. تُخزَّن كلمة المرور بشكل مشفّر لدى مزوّد المصادقة (Supabase)، ولا نطّلع عليها أو نخزّنها كنص عادي أبدًا.</td></tr>
+        <tr><td>الاسم الأول، الاسم العائلي، تاريخ الميلاد</td><td>عند التسجيل</td><td>تخصيص حسابك، وعرض هويتك ضمن العلامة المائية الأمنية على المحتوى (انظر القسم 3).</td></tr>
+        <tr><td>الاسم الكامل، البريد الإلكتروني، خطة الاشتراك، مرجع الدفع الذي ترسله</td><td>عند طلب اشتراك مدفوع</td><td>التحقق اليدوي من اشتراكك وتفعيله. لا نعالج مدفوعات البطاقات ولا نخزّن بياناتها؛ ترسل لنا مرجعًا لعملية دفع أجريتها بوسيلتك الخاصة، ويقوم المسؤول بالتحقق منها.</td></tr>
+        <tr><td>معرّف الجهاز/الجلسة، نوع الجهاز (مثال: "Chrome على Windows")، الطوابع الزمنية</td><td>عند كل تسجيل دخول</td><td>تطبيق سياسة الجهاز الواحد الموضّحة في القسم 3.</td></tr>
+        <tr><td>عنوان IP، معلومات المتصفح/الجهاز، نوع الحدث</td><td>أحداث أمنية معيّنة (محاولات الدخول، إجراءات الإدارة، رصد لقطات الشاشة/التسجيل داخل التطبيقات)</td><td>أمن الحساب، منع الاحتيال، والتحقيق في أي مخالفة محتملة لشروط الاستخدام.</td></tr>
+      </table>
+      <p>نحن <strong>لا</strong> نجمع رقم هاتفك ولا موقعك الجغرافي
+      الدقيق — لا يُطلب أي منهما في أي مكان من التطبيق.</p>
+
+      <h2>2. أسباب جمع هذه البيانات</h2>
+      <ul>
+        <li>لإنشاء حسابك وتأمينه، والتحقق من هويتك عند تسجيل الدخول.</li>
+        <li>للتحقق من اشتراكك وإدارته، ومنحك الوصول فقط إلى السداسي/السداسيات التي دفعت مقابلها.</li>
+        <li>لإرسال رسائل بريد إلكتروني متعلقة بحسابك (رموز التحقق، إعادة تعيين كلمة المرور) عبر مزوّد البريد الخاص بنا.</li>
+        <li>لردع، وحيثما أمكن، تحديد أي نسخ أو مشاركة غير مصرّح بها لمحتوى الدروس المدفوعة.</li>
+        <li>لرصد أي نشاط مشبوه على الحساب والاستجابة له، بما في ذلك مشاركة الحساب ومحاولات الدخول الفاشلة المتكررة.</li>
+      </ul>
+      <p>لا نستخدم بياناتك لأغراض إعلانية، ولا نبيع بياناتك الشخصية
+      لأي جهة.</p>
+
+      <h2>3. كيف نحمي محتوى الدروس</h2>
+      <p>بما أن ENS Advantage خدمة اشتراك مدفوعة، فإننا نتخذ خطوات
+      حقيقية (وإن لم تكن مطلقة — انظر ملاحظة الصراحة أدناه) لحماية
+      محتوى الدروس من النسخ وإعادة النشر:</p>
+      <ul>
+        <li><strong>العلامة المائية</strong> — تُعرَض على كل صفحة من محتوى الدروس المدفوعة علامة مائية ظاهرة تحمل اسمك وبريدك الإلكتروني وتاريخ ووقت فتحك للصفحة. هذا ليس جمعًا إضافيًا للبيانات، بل عرض لمعلومات قدّمتها لنا مسبقًا، مباشرة على الصفحة، كوسيلة ردع وتتبّع لأي نسخة مسرّبة.</li>
+        <li><strong>قفل الجلسة على جهاز واحد</strong> — يمكن تسجيل الدخول إلى حسابك من جهاز واحد فقط في كل مرة. تسجيل الدخول من جهاز جديد يسجّل خروجك تلقائيًا من الجهاز السابق.</li>
+        <li><strong>لا يوجد خيار تحميل</strong> — تُعرض الدروس داخل التطبيق فقط؛ لا يوجد أي زر أو رابط لتحميل الملفات الأصلية.</li>
+        <li><strong>حماية تطبيقات الجوال</strong> — على أندرويد، يفعّل التطبيق خاصية على مستوى النظام تمنع لقطات الشاشة والتسجيل. على iOS، يُعتّم التطبيق الشاشة طوال مدة تسجيل الشاشة النشط؛ أما لقطة الشاشة الفردية فلا يمكن منعها تقنيًا على iOS من قِبل أي تطبيق (لا توفّر Apple أي إمكانية لذلك)، لذا يتم رصدها وتسجيلها على حسابك للمراجعة بدلًا من ذلك.</li>
+      </ul>
+      <div class="legal-callout">
+        <strong>ملاحظة صريحة:</strong> لا توجد تقنية، لدينا أو لدى أي
+        جهة أخرى، قادرة على منع شخص من تصوير الشاشة بكاميرا جهاز آخر.
+        الهدف من هذه الإجراءات هو الردع وإمكانية التتبّع، وليس
+        الاستحالة المادية. راجع
+        <a href="/terms.html">شروط الاستخدام</a> لمعرفة ما يحدث في
+        حال ثبوت مخالفة.
+      </div>
+
+      <h2>4. مع من نشارك البيانات</h2>
+      <p>نستخدم عددًا محدودًا من مزوّدي الخدمات لتشغيل المنصة، ولا
+      يحصل كل منهم إلا على البيانات اللازمة لأداء مهمته، ولا يجوز
+      لأي منهم استخدام بياناتك لأغراضه الخاصة:</p>
+      <ul>
+        <li><strong>Supabase</strong> — مزوّد قاعدة البيانات والمصادقة وتخزين الملفات ومنطق الخادم. تمر جميع بيانات الحساب والاشتراك والمحتوى عبر بنية Supabase التحتية.</li>
+        <li><strong>Vercel</strong> — يستضيف الموقع ويقدّمه إلى متصفحك أو تطبيقك.</li>
+        <li><strong>Brevo</strong> — يرسل رسائل البريد الإلكتروني الخاصة بالحساب نيابة عنا (رموز التحقق عند التسجيل، ورسائل إعادة تعيين كلمة المرور). يتلقى Brevo بريدك الإلكتروني لهذا الغرض فقط.</li>
+        <li><strong>Cloudflare</strong> — مهيّأ للاستخدام المستقبلي كطبقة أمان/CDN عند انتقال المنصة إلى نطاق مخصّص. وهو حاليًا غير موجود في مسار الطلبات لموقع <code dir="ltr">ens-advantage.vercel.app</code> ولا يعالج بياناتك حاليًا.</li>
+      </ul>
+      <p>لا نشارك بياناتك مع المعلنين أو وسطاء البيانات أو أي جهة
+      خارج القائمة أعلاه، إلا في الحالات التي يقتضيها القانون.</p>
+
+      <h2>5. مدة الاحتفاظ بالبيانات</h2>
+      <p>نحتفظ ببيانات حسابك طوال فترة نشاط الحساب. تُحفظ سجلات
+      الأحداث الأمنية لفترة محدودة لدعم التحقيق في الاحتيال أو
+      إساءة الاستخدام، وقد تُحذف أو تُجمَّع بعد ذلك.</p>
+
+      <h2>6. حقوقك</h2>
+      <ul>
+        <li><strong>الاطلاع</strong> — يمكنك طلب نسخة من بياناتك الشخصية التي نحتفظ بها.</li>
+        <li><strong>التصحيح</strong> — يمكنك طلب تصحيح أي معلومات غير دقيقة في حسابك.</li>
+        <li><strong>الحذف</strong> — يمكنك طلب حذف حسابك وبياناتك الشخصية المرتبطة به. سنقوم بذلك خلال مدة معقولة، باستثناء السجلات التي يتوجب علينا الاحتفاظ بها لأغراض قانونية أو أمنية (مثل سجل أمني مرتبط بمخالفة مؤكدة لشروط الاستخدام).</li>
+      </ul>
+      <p>لممارسة أي من هذه الحقوق، تواصل معنا عبر البيانات الواردة
+      في القسم 8.</p>
+
+      <h2>7. خصوصية القُصَّر</h2>
+      <p>منصة ENS Advantage مخصّصة لطلبة المستوى الجامعي (السنة
+      الأولى من التعليم العالي) وغير موجّهة للأطفال دون سن 13 عامًا.</p>
+
+      <h2>8. التواصل والتعديلات على هذه السياسة</h2>
+      <p>قد نُحدّث سياسة الخصوصية هذه من وقت لآخر؛ وسيعكس تاريخ "آخر
+      تحديث" أعلاه أحدث نسخة. لأي استفسار متعلق بالخصوصية، أو طلب
+      بيانات، أو قلق، تواصل مع مسؤول المنصة عبر قناة الدعم المذكورة
+      في التطبيق، أو عبر البريد الإلكتروني المرتبط بالمنصة.</p>
+
+      <div class="legal-contact">
+        ذو صلة: <a href="/terms.html">شروط الاستخدام واتفاقية مكافحة القرصنة</a>
+      </div>
+    </div>
+
+  </div>
+
+<script>
+  function setLang(lang) {
+    document.getElementById('content-en').style.display = lang === 'en' ? 'block' : 'none';
+    document.getElementById('content-ar').style.display = lang === 'ar' ? 'block' : 'none';
+    document.getElementById('btn-en').classList.toggle('active', lang === 'en');
+    document.getElementById('btn-ar').classList.toggle('active', lang === 'ar');
+    document.documentElement.lang = lang;
+    try { localStorage.setItem('ens_legal_lang', lang); } catch (_e) {}
+  }
+  (function () {
+    var saved = null;
+    try { saved = localStorage.getItem('ens_legal_lang'); } catch (_e) {}
+    if (saved === 'ar') setLang('ar');
+  })();
+</script>
+</body>
+</html>
