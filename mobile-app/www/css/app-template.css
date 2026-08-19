@@ -1,0 +1,272 @@
+/* ═══════════════════════════════════════════════════════════════
+   APP TEMPLATE — native app visual system
+   ───────────────────────────────────────────────────────────────
+   Applied to every screen in this app copy (mobile-app/www/ only —
+   see the header comment in index.html). Follows the structure and
+   component organization of the reference Figma template ("Online
+   Course E-Learning Educational Website UI Template", Figma
+   Community, light theme): pill-tag badges, numbered benefit cards,
+   image/cover-topped course cards, rounded-input login forms,
+   testimonial-style cards, generous corner radii throughout.
+
+   Colors are NOT from the template (which uses orange). Every value
+   below is one of this project's own existing tokens from
+   css/base.css — no new hex values are introduced anywhere in this
+   file.
+
+   No @media gating: this copy is only ever loaded inside the
+   compiled native app (mobile-app/capacitor.config.json has no
+   server.url), so what's here simply IS the app's design, no
+   conditional logic needed.
+═══════════════════════════════════════════════════════════════ */
+
+/* ── 1) Native-feel foundation ─────────────────────────────────── */
+html, body {
+  -webkit-tap-highlight-color: transparent;
+  scrollbar-width: none;
+}
+html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; }
+button, a, .module-header, .user-chip, .tab-btn, .auth-tab {
+  -webkit-touch-callout: none;
+}
+.site-header, .bottom-nav, .tab-btn, .btn-primary, .btn-secondary,
+.btn-hero-primary, .btn-hero-secondary, .auth-tab, .course-cta {
+  -webkit-user-select: none;
+  user-select: none;
+}
+.tap-scale:active { transform: scale(.97); transition: transform .08s ease; }
+
+/* ── 2) Navbar (template: logo + pill Login button) ──────────────
+   Reuses the existing .site-header/.header-inner/.user-chip — no
+   duplicate header markup to keep in sync. */
+.header-inner { padding: 0 1.1rem; height: 60px; }
+.user-chip {
+  border-radius: 999px !important;
+  background: var(--accent) !important;
+  color: white !important;
+  padding: .45rem 1rem !important;
+  font-weight: 700;
+}
+.user-chip * { color: white !important; }
+
+/* ── 3) Top promo banner (template's orange announcement strip) ──
+   Same slot the template uses above the navbar. Uses --accent
+   instead of the template's orange — everything else about the
+   pattern (bold white text on a solid strip, small icon) matches. */
+.app-promo-banner {
+  background: var(--navy);
+  color: white;
+  font-size: .78rem;
+  font-weight: 700;
+  text-align: center;
+  padding: .55rem 1rem;
+  padding-top: calc(.55rem + env(safe-area-inset-top, 0px));
+}
+
+/* ── 4) Hero (template: pill badge + bold headline + 2 buttons) ──
+   Structure already matches the template closely — tuning corner
+   radii, weight, and pill shape rather than rebuilding it. */
+.hero-eyebrow {
+  border-radius: 999px !important;
+}
+.hero-title { letter-spacing: -.02em; }
+.btn-hero-primary, .btn-hero-secondary {
+  border-radius: var(--radius-lg) !important;
+  font-weight: 700 !important;
+}
+.intro-card { border-radius: var(--radius-xl) !important; }
+
+/* ── 5) Numbered benefit cards (grading formulas section) ─────────
+   Template pattern: giant "01" numeral top-right, bold heading,
+   description, small circular arrow-icon button bottom-right.
+   Pure CSS counters — zero HTML/JS changes needed. */
+.grading-grid { counter-reset: gradenum; }
+.grading-card {
+  position: relative;
+  counter-increment: gradenum;
+  border-radius: var(--radius-xl) !important;
+  padding: 1.5rem 1.5rem 4rem !important;
+  overflow: hidden;
+}
+.grading-card::before {
+  content: counter(gradenum, decimal-leading-zero);
+  position: absolute;
+  top: .75rem;
+  right: 1.1rem;
+  font-size: 2.75rem;
+  font-weight: 800;
+  color: var(--slate-200);
+  line-height: 1;
+  z-index: 0;
+}
+.grading-card::after {
+  content: '↗';
+  position: absolute;
+  bottom: 1.1rem;
+  right: 1.1rem;
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--slate-200);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--accent);
+  font-size: 1.1rem;
+  background: white;
+}
+.grading-card > * { position: relative; z-index: 1; }
+.grading-icon { display: none; } /* template uses the numeral instead of an icon badge */
+
+/* ── 6) Calculator (template: rounded tool card + pill tabs) ───── */
+.tabs {
+  border-radius: 999px !important;
+  background: var(--slate-100);
+}
+.tab-btn {
+  border-radius: 999px !important;
+  font-weight: 700;
+}
+.tab-btn.active {
+  background: var(--accent) !important;
+  color: white !important;
+}
+.calc-header-block, .calc-card, .calculator-panel {
+  border-radius: var(--radius-xl) !important;
+}
+
+/* ── 7) Course cards (curriculum / module list) ───────────────────
+   Template pattern: image/cover top, two pill tags, bold title,
+   caption, full-width light button. Cover uses --course-accent-a/b,
+   set per card in js/modules.js from the existing token palette —
+   no photos available, so a gradient + big initial stands in for
+   the template's course thumbnail. */
+.module-card {
+  border-radius: var(--radius-xl) !important;
+  overflow: hidden;
+  border: 1px solid var(--slate-200);
+}
+.module-header {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 0 0 1.1rem !important;
+  cursor: pointer;
+}
+.course-cover {
+  height: 92px;
+  background: linear-gradient(135deg, var(--cover-a, var(--accent)), var(--cover-b, var(--navy)));
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 1rem;
+}
+.course-cover-initial {
+  font-size: 2.25rem;
+  font-weight: 800;
+  color: rgba(255,255,255,.92);
+}
+.course-card-body { padding: 0 1.1rem; }
+.course-tags { display: flex; gap: .5rem; margin-bottom: .7rem; flex-wrap: wrap; }
+.course-tag {
+  display: inline-flex; align-items: center;
+  padding: .3rem .75rem;
+  border-radius: 999px;
+  background: var(--slate-100);
+  border: 1px solid var(--slate-200);
+  color: var(--slate-700);
+  font-size: .72rem;
+  font-weight: 700;
+}
+.course-tag-alt { background: var(--accent-light); border-color: var(--accent-light); color: var(--accent); }
+.module-name { font-size: 1.05rem; font-weight: 800; margin-bottom: .35rem; }
+.course-caption { color: var(--slate-500); font-size: .82rem; margin-bottom: 1rem; }
+.course-cta {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--slate-50);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-md);
+  padding: .8rem 1rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+.module-card.expanded .module-chevron { transform: rotate(180deg); }
+.module-chevron { transition: transform .2s ease; }
+
+/* Free/Premium/Unlocked pills inside the expanded content list —
+   restyled to the same pill language as the course tags above. */
+.content-tag, .free-tag, .premium-tag, .unlocked-tag {
+  border-radius: 999px !important;
+}
+
+/* ── 8) Community (template: testimonial card) ────────────────── */
+.community-section { border-radius: var(--radius-xl) !important; overflow: hidden; }
+.community-tag {
+  border-radius: 999px !important;
+  display: inline-flex;
+}
+.community-title { letter-spacing: -.01em; }
+.community-card { border-radius: var(--radius-xl) !important; }
+.chat-btn {
+  border-radius: var(--radius-lg) !important;
+  font-weight: 700;
+}
+
+/* ── 9) Auth screens (template: Login page) ────────────────────── */
+.auth-screen { background: var(--slate-50); }
+.auth-card, .auth-box {
+  border-radius: var(--radius-xl) !important;
+}
+.auth-tabs {
+  border-radius: 999px !important;
+  background: var(--slate-100);
+  padding: 4px;
+}
+.auth-tab {
+  border-radius: 999px !important;
+  font-weight: 700;
+}
+.auth-tab.active {
+  background: white !important;
+  color: var(--navy) !important;
+  box-shadow: var(--shadow-sm);
+}
+.form-label {
+  font-size: .78rem;
+  font-weight: 700;
+  color: var(--slate-700);
+  margin-bottom: .4rem;
+  display: block;
+}
+.form-input {
+  background: var(--slate-100) !important;
+  border: 1px solid transparent !important;
+  border-radius: var(--radius-md) !important;
+  padding: .85rem 1rem !important;
+  font-size: .95rem;
+}
+.form-input:focus {
+  border-color: var(--accent) !important;
+  background: white !important;
+  outline: none;
+}
+.btn-primary {
+  border-radius: var(--radius-lg) !important;
+  font-weight: 800 !important;
+  padding: .9rem !important;
+}
+.btn-secondary {
+  background: transparent !important;
+  color: var(--accent) !important;
+  font-weight: 700 !important;
+  box-shadow: none !important;
+  border: none !important;
+}
+
+/* ── 10) Footer (template: minimal, centered, rounded top) ──────── */
+.footer {
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+}
+
+/* ── 11) Overlap safety net ───────────────────────────────────────
+   Nothing above changes position/z-index of the dropdown, modal, or
+   PDF viewer overlays — only their corner radii and colors — so
+   their existing stacking order is untouched. This just guards the
+   one element whose width could realistically clip against a phone
+   screen edge after the pill restyle above. */
+.user-dropdown { max-width: calc(100vw - 2rem); }

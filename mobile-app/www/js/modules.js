@@ -49,15 +49,39 @@ export const Modules = {
       }
       card.id = 'mod-card-' + CSS.escape(mod.name);
 
+      // Course-card cover accent — cycled from the existing token
+      // palette (see css/app-template.css §7). No photos available,
+      // so a gradient + big initial stands in for the template's
+      // course thumbnail image.
+      const COVER_PAIRS = [
+        ['var(--accent)', 'var(--navy)'],
+        ['var(--purple)', 'var(--navy-mid)'],
+        ['var(--green)', 'var(--navy)'],
+        ['var(--orange)', 'var(--navy-mid)'],
+        ['var(--gold)', 'var(--navy)'],
+      ];
+      const [coverA, coverB] = COVER_PAIRS[index % COVER_PAIRS.length];
+      card.style.setProperty('--cover-a', coverA);
+      card.style.setProperty('--cover-b', coverB);
+      const initial = (mod.name || '').trim()[0]?.toUpperCase() || '•';
+
       const header = document.createElement('div');
       header.className = 'module-header';
       header.onclick = () => this.toggleModule(mod.name);
       header.innerHTML = `
-        <div class="module-info">
+        <div class="course-cover"><span class="course-cover-initial">${escHtml(initial)}</span></div>
+        <div class="course-card-body">
+          <div class="course-tags">
+            <span class="course-tag">⚖ Coef ${mod.coef}</span>
+            <span class="course-tag course-tag-alt">S${State.activeSemester}</span>
+          </div>
           <div class="module-name${mod.rtl ? ' rtl' : ''}" ${mod.rtl ? 'dir="rtl"' : ''}>${escHtml(mod.name)}</div>
-          <div class="coef-pill">⚖ Coefficient: ${mod.coef}</div>
+          <div class="course-caption">Summaries, full lessons &amp; strategic guides</div>
+          <div class="course-cta">
+            <span>View Materials</span>
+            <span class="module-chevron">▾</span>
+          </div>
         </div>
-        <div class="module-chevron">▾</div>
       `;
 
       const body = document.createElement('div');

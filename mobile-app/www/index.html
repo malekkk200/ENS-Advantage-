@@ -138,6 +138,11 @@
   <link rel="stylesheet" href="css/calculator.css" />
   <link rel="stylesheet" href="css/meme-player.css" />
   <link rel="stylesheet" href="css/app-mode.css" />
+  <!-- App-only visual system, following the reference Figma
+       e-learning template's structure. Loaded last so it can safely
+       override the shared component styles above. See its own
+       header comment for details. -->
+  <link rel="stylesheet" href="css/app-template.css" />
 
   <!-- ═══════════════════════════════════════════════════════════
        THIRD-PARTY LIBRARIES (UMD builds — attach to window.*)
@@ -332,6 +337,11 @@
 <div id="main-app" class="hidden">
 
   <!-- HEADER -->
+  <!-- Promo banner — see css/app-template.css §3. Template pattern,
+       project colors. Sits above the header, same slot the
+       reference template uses for its announcement strip. -->
+  <div class="app-promo-banner" data-app-order="promo">🎓 Free Summaries &amp; Guides for every student — Premium unlocks full lessons</div>
+
   <header class="site-header" data-app-order="header">
     <div class="header-inner">
       <a class="header-logo" href="#top">
