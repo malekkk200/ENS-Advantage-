@@ -442,8 +442,30 @@ export const PDFViewer = (() => {
         if (myToken !== _openToken) return; // superseded by a newer open() while awaiting
 
         if (error || !data?.signedUrl) {
-          console.error('[PDFViewer] get-material-url error:', error?.message || data?.error);
-          _setError('Access denied or content unavailable. Please verify your subscription.');
+          // supabase-js v2 wraps BOTH a real 403 from the function AND a
+          // pure network/CORS failure (e.g. fetch() rejected before ever
+          // reaching the server — as happens when the caller's Origin
+          // isn't on the Edge Function's CORS allow-list) into this same
+          // { error } shape rather than throwing. Previously every case
+          // here showed "verify your subscription", which was actively
+          // misleading whenever the real cause was a connection/CORS
+          // problem, not an access one. Differentiate by HTTP status
+          // when we have it.
+          const status = error?.context?.status;
+          console.error('[PDFViewer] get-material-url error:', { status, name: error?.name, message: error?.message || data?.error, error });
+          if (status === 403) {
+            _setError('Access denied. Please verify your subscription.');
+          } else if (status === 401) {
+            _setError('Your session has expired. Please log in again.');
+          } else if (status === 429) {
+            _setError('Too many requests — please slow down and try again shortly.');
+          } else if (!status) {
+            // No HTTP status at all means the request never got a server
+            // response (network/CORS-level failure).
+            _setError('Connection problem loading this document. Please check your internet connection and try again.');
+          } else {
+            _setError('Could not load this document right now. Please try again.');
+          }
           return;
         }
         signedUrl = data.signedUrl;

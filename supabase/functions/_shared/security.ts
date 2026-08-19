@@ -20,6 +20,18 @@ const ALLOWED_ORIGINS = [
   // Local development only.
   "http://localhost:3000",
   "http://127.0.0.1:3000",
+  // Native app (Capacitor, mobile-app/) — the WebView sends one of
+  // these as its Origin header, not the website's origin. Without
+  // these, the request still succeeds server-side (so security_logs
+  // shows success:true) but the browser/WebView silently discards the
+  // response due to the CORS mismatch, and the app shows a false
+  // "access denied" error even though nothing was actually denied.
+  // Android (Capacitor default androidScheme is "https"):
+  "https://localhost",
+  // iOS (Capacitor default ios scheme):
+  "capacitor://localhost",
+  // Defensive extra for older WebViews / non-default configs:
+  "http://localhost",
 ].filter(Boolean);
 
 /**

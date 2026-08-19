@@ -22,6 +22,11 @@ export const Modules = {
 
   updatePremiumNotice() {
     const notice = $('premium-notice');
+    // The native-app copy omits this bar entirely (removed from
+    // index.html) — bail out safely instead of throwing when the
+    // element doesn't exist. The website copy still has the element
+    // and is unaffected by this guard.
+    if (!notice) return;
     const hasPrem = State.hasPremiumForSem(State.activeSemester);
     if (hasPrem) {
       notice.style.display = 'none';

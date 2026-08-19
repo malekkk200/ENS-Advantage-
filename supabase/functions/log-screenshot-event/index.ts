@@ -16,6 +16,11 @@ const ALLOWED_ORIGINS = [
   Deno.env.get('EXTRA_ALLOWED_ORIGIN') ?? '',
   'http://localhost:3000',
   'http://127.0.0.1:3000',
+  // Native app (Capacitor, mobile-app/) — see get-material-url/index.ts
+  // for why these are needed (same CORS-mismatch failure mode).
+  'https://localhost',      // Android (Capacitor default androidScheme)
+  'capacitor://localhost',  // iOS (Capacitor default ios scheme)
+  'http://localhost',       // defensive extra for older WebViews
 ].filter(Boolean);
 
 function corsHeaders(req: Request): Record<string, string> {

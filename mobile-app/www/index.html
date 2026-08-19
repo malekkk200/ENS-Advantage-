@@ -468,11 +468,8 @@
       <button id="sem-tab-2" class="tab-btn" onclick="App.Modules.switchSemester(2)">Semester 2</button>
     </div>
 
-    <div id="premium-notice" class="reveal" style="background:linear-gradient(135deg,#fef3c7 0%,#fde68a 100%);border:1px solid #f59e0b;border-radius:var(--radius-md);padding:.85rem 1.1rem;margin-bottom:1.25rem;display:flex;align-items:center;gap:.75rem;font-size:.875rem;color:#92400e;animation-delay: 0.3s;">
-      <span style="font-size:1.1rem;">🔐</span>
-      <span><strong>Free access:</strong> Summaries and guides are open. Full Lessons require Semester <span id="notice-sem">1</span> Premium.</span>
-      <button id="notice-unlock-btn" onclick="App.Subscription.open(1)" style="margin-left:auto;padding:.35rem .8rem;background:#f59e0b;color:white;border:none;border-radius:var(--radius-sm);font-weight:700;cursor:pointer;font-size:.8rem;white-space:nowrap;font-family:'Inter',sans-serif;">Unlock →</button>
-    </div>
+    <!-- premium-notice bar intentionally omitted in the native-app copy
+         (see js/modules.js updatePremiumNotice() guard) -->
 
     <div class="module-list" id="module-list"></div>
   </section>
