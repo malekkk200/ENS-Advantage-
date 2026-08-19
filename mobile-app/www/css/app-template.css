@@ -49,20 +49,6 @@ button, a, .module-header, .user-chip, .tab-btn, .auth-tab {
 }
 .user-chip * { color: white !important; }
 
-/* ── 3) Top promo banner (template's orange announcement strip) ──
-   Same slot the template uses above the navbar. Uses --accent
-   instead of the template's orange — everything else about the
-   pattern (bold white text on a solid strip, small icon) matches. */
-.app-promo-banner {
-  background: var(--navy);
-  color: white;
-  font-size: .78rem;
-  font-weight: 700;
-  text-align: center;
-  padding: .55rem 1rem;
-  padding-top: calc(.55rem + env(safe-area-inset-top, 0px));
-}
-
 /* ── 4) Hero (template: pill badge + bold headline + 2 buttons) ──
    Structure already matches the template closely — tuning corner
    radii, weight, and pill shape rather than rebuilding it. */
