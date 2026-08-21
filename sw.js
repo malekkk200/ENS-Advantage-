@@ -25,7 +25,7 @@
 // Bump this on every deploy that changes shell files so old caches
 // get evicted in activate() below. Doesn't need to be meaningful —
 // just needs to change.
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2'; // bumped: index.html/router.js/supabaseClient.js changed (instant returning-user reveal)
 const CACHE_NAME = `ens-advantage-shell-${CACHE_VERSION}`;
 
 // Separate, independently-versioned cache for guide images. Kept apart

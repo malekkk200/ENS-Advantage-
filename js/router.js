@@ -14,6 +14,12 @@ import { UI } from './ui.js';
    RENDER ROUTER
 ───────────────────────────────────────────────────────────── */
 export async function render() {
+  // The real, authoritative auth decision is being made right now —
+  // release the optimistic "returning-user" pre-paint reveal from
+  // index.html's <head> (see its comment). Safe/idempotent to call
+  // even when the class was never set.
+  document.documentElement.classList.remove('returning-user');
+
   if (!State.currentUser) {
     UI.showAuthLogin();
   } else if (!State.currentUser.email_confirmed_at) {
