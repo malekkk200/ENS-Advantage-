@@ -42,6 +42,60 @@
       } catch (e) { /* never let detection break the website */ }
     })();
   </script>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       INSTANT RETURNING-USER REVEAL (no login-screen flash)
+       ───────────────────────────────────────────────────────────
+       Runs synchronously, before the CSSOM/DOM finish building and
+       before first paint — same technique as APP-MODE DETECTION
+       above. #auth-screen is visible by default in the markup and
+       #main-app starts class="hidden"; without this, every load
+       briefly shows the login screen while auth.js's async Supabase
+       session check resolves. Here we do a zero-network, synchronous
+       read of the session Supabase already persisted to localStorage
+       (see js/supabaseClient.js) and, if it looks unexpired, add
+       .returning-user to <html> so the paired <style> below hides
+       #auth-screen / reveals #main-app from the very first frame.
+
+       This is a COSMETIC decision only — it never grants access to
+       anything. auth.js still performs the real, authoritative
+       Supabase session check/refresh in the background (and every
+       actual data request is still independently verified server-side
+       via RLS / Edge Function JWT checks regardless of this class).
+       router.js removes .returning-user the instant that real check
+       resolves, whichever way it goes — if the cached token turns out
+       to be invalid/expired/revoked, the user is correctly bounced
+       back to the login screen at that point. The inline script at
+       the end of <body> is a bounded (4s) safety net that clears the
+       class regardless, so a stale cache can never hide the login
+       screen from someone who genuinely needs to sign back in.
+
+       Kept intentionally identical to the root /index.html version —
+       this is shared frontend logic, not app-specific UI, so the two
+       copies should stay in sync even though they're edited/committed
+       separately per file (see the header note at the top of this file).
+  ═══════════════════════════════════════════════════════════ -->
+  <script>
+    (function () {
+      try {
+        var key = Object.keys(localStorage).find(function (k) {
+          return /^sb-.*-auth-token$/.test(k);
+        });
+        if (!key) return;
+        var stored = JSON.parse(localStorage.getItem(key));
+        var session = (stored && stored.currentSession) || stored; // supabase-js v1/v2 shapes
+        var expiresAt = session && session.expires_at;
+        var hasToken = session && session.access_token;
+        if (hasToken && expiresAt && (expiresAt * 1000) > Date.now()) {
+          document.documentElement.classList.add('returning-user');
+        }
+      } catch (e) { /* never let this block the page */ }
+    })();
+  </script>
+  <style>
+    html.returning-user #auth-screen { display: none !important; }
+    html.returning-user #main-app.hidden { display: flex !important; flex-direction: column !important; }
+  </style>
   <title>ENS Advantage | English Studies Summaries &amp; Guides — ENS Kouba, Constantine, Ouargla, Oran &amp; Sétif</title>
 
   <!-- ═══════════════════════════════════════════════════════════
@@ -954,6 +1008,21 @@
      (js/*.js). See js/main.js for the full module map.
 ═══════════════════════════════════════════════════════════ -->
 <script type="module" src="js/main.js"></script>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     RETURNING-USER REVEAL — bounded safety net
+     Pairs with the pre-paint script in <head>. router.js normally
+     clears .returning-user the instant the real Supabase session
+     check resolves (well under a second in practice). This is just
+     a hard ceiling so a stale/invalid cached token, or an unusually
+     slow load, can never keep the optimistic reveal up longer than
+     4s and block someone who actually needs to see the login screen.
+═══════════════════════════════════════════════════════════════ -->
+<script>
+  setTimeout(function () {
+    document.documentElement.classList.remove('returning-user');
+  }, 4000);
+</script>
 
 <!-- ═══════════════════════════════════════════════════════════════
      No service worker here — this copy is bundled locally inside

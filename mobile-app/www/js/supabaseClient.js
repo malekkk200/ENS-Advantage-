@@ -18,7 +18,21 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 export const Supabase = (() => {
   const URL = SUPABASE_URL;
   const KEY = SUPABASE_ANON_KEY;
-  const client = window.supabase.createClient(URL, KEY);
+  // persistSession/autoRefreshToken are already supabase-js v2's
+  // defaults — set explicitly (not a behavior change) so the
+  // returning-user session persistence this app relies on is
+  // documented here rather than implicit. Session is stored in
+  // localStorage under a `sb-<project-ref>-auth-token` key (read by
+  // the pre-paint check in index.html); autoRefreshToken silently
+  // renews the access token in the background before it expires, so
+  // a signed-in student stays logged in without re-entering
+  // credentials until they explicitly log out or the refresh token
+  // itself is revoked/expires. In the native app this localStorage
+  // lives inside the WebView's persistent data directory, so it
+  // survives app restarts the same way as an installed browser PWA.
+  const client = window.supabase.createClient(URL, KEY, {
+    auth: { persistSession: true, autoRefreshToken: true }
+  });
   return {
     client,
     url: URL,
