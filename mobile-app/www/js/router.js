@@ -18,6 +18,9 @@ export async function render() {
   // release the optimistic "returning-user" pre-paint reveal from
   // index.html's <head> (see its comment). Safe/idempotent to call
   // even when the class was never set.
+  if (/[?&]authdebug=1\b/.test(location.search)) {
+    console.info('[returning-user] router.render() — clearing class. State.currentUser:', State.currentUser, '| had class:', document.documentElement.classList.contains('returning-user'));
+  }
   document.documentElement.classList.remove('returning-user');
 
   if (!State.currentUser) {
