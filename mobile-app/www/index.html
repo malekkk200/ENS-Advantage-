@@ -78,26 +78,52 @@
   <script>
     (function () {
       var DEBUG = /[?&]authdebug=1\b/.test(location.search);
-      function log() { if (DEBUG) console.info.apply(console, ['[returning-user]'].concat([].slice.call(arguments))); }
+      window.__authDebugLines = [];
+      window.__authDebug = function () {
+        var msg = [].slice.call(arguments).map(function (a) {
+          return (typeof a === 'object') ? JSON.stringify(a) : String(a);
+        }).join(' ');
+        if (!DEBUG) return;
+        console.info('[returning-user]', msg);
+        window.__authDebugLines.push(msg);
+        var el = document.getElementById('__auth-debug-banner');
+        if (el) el.textContent = window.__authDebugLines.join('\n');
+      };
+      if (DEBUG) {
+        // Body doesn't exist yet at this point in <head> — render the
+        // visible on-page banner (for testing on a phone with no
+        // devtools) as soon as it does, then flush whatever was
+        // already logged.
+        document.addEventListener('DOMContentLoaded', function () {
+          var el = document.createElement('pre');
+          el.id = '__auth-debug-banner';
+          el.textContent = window.__authDebugLines.join('\n');
+          el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:999999;' +
+            'background:#000;color:#0f0;font:11px/1.4 monospace;padding:8px;' +
+            'max-height:45vh;overflow:auto;white-space:pre-wrap;margin:0;' +
+            'border-bottom:3px solid #0f0;';
+          document.body.insertBefore(el, document.body.firstChild);
+        });
+      }
       try {
         var allKeys = Object.keys(localStorage);
-        log('localStorage keys:', allKeys);
+        window.__authDebug('localStorage keys:', allKeys);
         var key = allKeys.find(function (k) {
           return /^sb-.*-auth-token$/.test(k);
         });
-        if (!key) { log('no sb-*-auth-token key found — showing login screen (expected if logged out / no cached session)'); return; }
+        if (!key) { window.__authDebug('no sb-*-auth-token key found — showing login screen (expected if logged out / no cached session)'); return; }
         var stored = JSON.parse(localStorage.getItem(key));
         var session = (stored && stored.currentSession) || stored; // supabase-js v1/v2 shapes
         var expiresAt = session && session.expires_at;
         var hasToken = session && session.access_token;
-        log('key:', key, '| hasToken:', !!hasToken, '| expiresAt:', expiresAt, '| expiresAtMs:', expiresAt && expiresAt * 1000, '| nowMs:', Date.now(), '| unexpired:', !!(expiresAt && (expiresAt * 1000) > Date.now()));
+        window.__authDebug('key:', key, '| hasToken:', !!hasToken, '| expiresAt:', expiresAt, '| expiresAtMs:', expiresAt && expiresAt * 1000, '| nowMs:', Date.now(), '| unexpired:', !!(expiresAt && (expiresAt * 1000) > Date.now()));
         if (hasToken && expiresAt && (expiresAt * 1000) > Date.now()) {
           document.documentElement.classList.add('returning-user');
-          log('added .returning-user to <html> — auth screen should be suppressed');
+          window.__authDebug('added .returning-user to <html> — auth screen should be suppressed');
         } else {
-          log('token missing/expired — showing login screen (correct)');
+          window.__authDebug('token missing/expired — showing login screen (correct)');
         }
-      } catch (e) { log('EXCEPTION, falling back to showing login screen:', e && e.message); }
+      } catch (e) { window.__authDebug('EXCEPTION, falling back to showing login screen:', e && e.message); }
     })();
   </script>
   <style>
