@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /js/
+Disallow: /css/
+Disallow: /assets/
+
+Sitemap: https://ens-advantage.vercel.app/sitemap.xml
