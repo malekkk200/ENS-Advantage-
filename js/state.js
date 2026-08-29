@@ -28,6 +28,8 @@ export const State = {
   pdfViewerActive: false,
   // subscription modal
   subModalOpen: false,
+  // app-download gate modal (website only — see appDownloadGate.js)
+  appGateOpen: false,
   selectedPlan: 'S1',
   subModalDefaultSemester: undefined,
   discountEligible: false, // new-student 40%-off first-subscription offer

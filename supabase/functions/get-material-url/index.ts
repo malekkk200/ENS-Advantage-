@@ -141,7 +141,15 @@ Deno.serve(async (req) => {
       .from('course-materials')
       .createSignedUrl(storagePath, SIGNED_URL_TTL_SECONDS);
 
-    await logSecurityEvent(admin, {
+    // Log in the background instead of awaiting it on the critical
+    // path — the audit trail (and the throttle counter it feeds on
+    // the *next* request) doesn't need to hold up *this* response,
+    // and logSecurityEvent() already fails silently on its own.
+    // EdgeRuntime.waitUntil() keeps the isolate alive long enough for
+    // the insert to finish after the response has already been sent.
+    // Falls back to a normal awaited call if that global is ever
+    // unavailable, so this can't silently stop logging.
+    const logPromise = logSecurityEvent(admin, {
       event_type: 'student_view_material',
       actor_email: user.email,
       success: !error && !!data?.signedUrl,
@@ -155,6 +163,11 @@ Deno.serve(async (req) => {
       },
       req,
     });
+    if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) {
+      EdgeRuntime.waitUntil(logPromise);
+    } else {
+      await logPromise;
+    }
 
     if (error || !data?.signedUrl) {
       return jsonResponse(req, { error: 'Access denied or content unavailable.' }, 403);

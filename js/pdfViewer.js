@@ -17,8 +17,8 @@
 import { sb } from './supabaseClient.js';
 import { State } from './state.js';
 import { lockBodyScroll, unlockBodyScroll } from './dom.js';
-import { paintWatermark } from './watermark.js';
 import { BackNav } from './backNav.js';
+import { MaterialCache } from './materialCache.js';
 
 // Initialise the PDF.js worker source immediately — this avoids a
 // small delay on first open because the worker script starts loading
@@ -33,31 +33,33 @@ if (window.pdfjsLib) {
    ─────────────────────────────────────────────────────────────
    Architecture:
      1. open() → immediately shows skeleton + the overlay
-     2. _fetchSignedUrl() → calls the get-material-url Edge Function,
-        which creates a 90-second-TTL signed URL as the requesting
-        user (so storage RLS is still the real gate — a denied user
-        gets an error, never a URL) and logs every attempt to
+     2. For free ('summary') content already opened once on this
+        device, the document's bytes are read straight from
+        MaterialCache (Cache Storage) — no network, no Edge Function
+        round trip, effectively instant. See materialCache.js for
+        why this is scoped to summaries only.
+     3. Otherwise: calls the get-material-url Edge Function, which
+        creates a 90-second-TTL signed URL as the requesting user
+        (so storage RLS is still the real gate — a denied user gets
+        an error, never a URL) and logs every attempt to
         security_logs, soft-throttling abnormal request bursts from
         one account before they reach storage.
-     3. _loadPdf() → passes the signed URL to PDF.js getDocument().
-        PDF.js streams the file; the raw bytes never appear in the
-        DOM as a blob or data-URI — they live only in PDF.js' own
-        internal buffer.
-     4. _buildPages() → creates one wrapper+canvas per page, sized
+     4. The signed URL (or the cached bytes) is handed to PDF.js
+        getDocument(). PDF.js streams/parses the file; the raw bytes
+        never appear in the DOM as a blob or data-URI — they live
+        only in PDF.js' own internal buffer (or, for a cache hit, an
+        ArrayBuffer already local to this tab).
+     5. _buildPages() → creates one wrapper+canvas per page, sized
         from that page's real aspect ratio, and wires an
         IntersectionObserver that renders each page's canvas only
         once it scrolls near the viewport.
-     5. A scroll listener (rAF-throttled) tracks which page is
+     6. A scroll listener (rAF-throttled) tracks which page is
         currently in view, to keep the page-number field and the
         "resume where you left off" position in sync as the user
         scrolls — not just when they tap next/prev.
-     6. Focus/visibility listeners blur the whole pages container
+     7. Focus/visibility listeners blur the whole pages container
         when the window loses focus, making screenshots harder and
         signalling users they should stay inside the platform.
-     7. Watermark tiles are painted per-page as absolute-positioned
-        text nodes over each canvas with pointer-events:none so they
-        can't be removed by selecting and deleting a DOM node — the
-        canvas itself has no text to select.
 ───────────────────────────────────────────────────────────── */
 export const PDFViewer = (() => {
   // ── Internal state ────────────────────────────────────────
@@ -169,11 +171,6 @@ export const PDFViewer = (() => {
     _el('pdf-zoom-label').textContent = Math.round(_zoomLevel * 100) + '%';
   }
 
-  /** Build the tiled user-identity watermark inside one page's layer */
-  function _buildWatermarkInto(layer) {
-    paintWatermark(layer, { className: 'pdf-wm-text' });
-  }
-
   /** Actually rasterize one page's canvas — called lazily by the IntersectionObserver */
   async function _renderPageEntry(entry) {
     if (entry.rendered || !_pdfDoc) return;
@@ -211,10 +208,10 @@ export const PDFViewer = (() => {
   }
 
   /**
-   * Build one wrapper+canvas+watermark per page (sized from that
-   * page's real dimensions, scaled uniformly with page 1's base
-   * scale), then wire the IntersectionObserver that lazily renders
-   * each canvas as it nears the viewport.
+   * Build one wrapper+canvas per page (sized from that page's real
+   * dimensions, scaled uniformly with page 1's base scale), then
+   * wire the IntersectionObserver that lazily renders each canvas
+   * as it nears the viewport.
    */
   async function _buildPages() {
     const container = _el('pdf-pages-container');
@@ -258,11 +255,6 @@ export const PDFViewer = (() => {
       const canvas = document.createElement('canvas');
       canvas.className = 'pdf-page-canvas';
       wrapper.appendChild(canvas);
-
-      const wm = document.createElement('div');
-      wm.className = 'pdf-watermark-layer';
-      wrapper.appendChild(wm);
-      _buildWatermarkInto(wm); // watermark doesn't depend on render state
 
       container.appendChild(wrapper);
       _pages.push({ num: n, wrapper, canvas, rendered: false });
@@ -341,6 +333,36 @@ export const PDFViewer = (() => {
         await _renderPageEntry(entry);
       }
     }
+  }
+
+  /**
+   * Shared tail-end of loading a document, regardless of whether its
+   * pdf.js loadingTask was created from a network `url` or from
+   * already-local cached `data` bytes: waits for the document to
+   * parse, builds the page scaffold, and resumes the saved reading
+   * position. Bails out cleanly (without touching shared state) if a
+   * newer open() call has superseded this one while awaiting.
+   */
+  async function _finishLoadingDoc(loadingTask, myToken) {
+    _pdfDoc = await loadingTask.promise;
+    if (myToken !== _openToken) { // superseded while awaiting — don't touch the newer viewer's state
+      try { await _pdfDoc.destroy(); } catch (_) {}
+      return;
+    }
+    _totalPages = _pdfDoc.numPages;
+
+    // Build every page's wrapper/canvas up front (sized correctly
+    // from real dimensions) and start the lazy-render observer —
+    // this is what makes the continuous scroll work.
+    await _buildPages();
+    if (myToken !== _openToken) return; // superseded mid-build
+
+    _showState('pages');
+    _updatePagePill();
+
+    // Resume from wherever the user last left off in this document
+    const startPage = _loadSavedPage(_materialId, _totalPages);
+    _scrollToPage(startPage);
   }
 
   /** Event: blur the pages container when window loses focus */
@@ -422,6 +444,47 @@ export const PDFViewer = (() => {
       _el('pdf-canvas-zone').addEventListener('scroll', _onScroll, { passive: true });
       if (!_devToolsTimer) _devToolsTimer = setInterval(_checkDevTools, 1200);
 
+      // ── 0. Instant path: already-cached free ('summary') content ──
+      // Skips both the Edge Function round trip and the PDF network
+      // fetch entirely — see materialCache.js for why this is scoped
+      // to 'summary' only (never 'fullLesson', which stays fully
+      // gated by a fresh signed URL + fresh audit-log row on every
+      // single open, in both this codebase and the app's).
+      const cacheable = type === 'summary';
+      if (cacheable) {
+        const cachedBytes = await MaterialCache.read(_materialId);
+        if (myToken !== _openToken) return; // superseded while awaiting
+
+        if (cachedBytes) {
+          // Tell the server this material was viewed again, purely for
+          // the audit trail / soft-throttle counter — never awaited,
+          // since no access decision here depends on its result (we're
+          // not using any URL it might return).
+          sb.functions.invoke('get-material-url', {
+            body: { storage_path: material.storagePath, material_id: material.id, title: material.title },
+          }).catch(() => {});
+
+          try {
+            const loadingTask = window.pdfjsLib.getDocument({
+              data:       cachedBytes,
+              cMapUrl:    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+              cMapPacked: true,
+            });
+            await _finishLoadingDoc(loadingTask, myToken);
+            return; // rendered entirely from cache — done
+          } catch (err) {
+            if (myToken !== _openToken) return; // superseded — newer open() owns error reporting now
+            console.warn('[PDFViewer] cached copy failed to load, evicting and falling back to network:', err);
+            // A partial/failed load may have left a PDFDocumentProxy
+            // behind — destroy it before the network path below
+            // creates a fresh one, so it isn't silently leaked.
+            if (_pdfDoc) { try { await _pdfDoc.destroy(); } catch (_) {} _pdfDoc = null; }
+            await MaterialCache.evict(_materialId);
+            // fall through to the normal network path below
+          }
+        }
+      }
+
       // ── 1. Generate a short-lived signed URL (90 seconds) ──
       // Routed through the get-material-url Edge Function rather than
       // calling storage.createSignedUrl() directly. Storage RLS is
@@ -498,25 +561,21 @@ export const PDFViewer = (() => {
           // (no internal hyperlinks rendered that could hint at structure)
         });
 
-        _pdfDoc     = await loadingTask.promise;
-        if (myToken !== _openToken) { // superseded while awaiting — don't touch the newer viewer's state
-          try { await _pdfDoc.destroy(); } catch (_) {}
-          return;
-        }
-        _totalPages = _pdfDoc.numPages;
-
-        // Build every page's wrapper/canvas/watermark up front (sized
-        // correctly from real dimensions) and start the lazy-render
-        // observer — this is what makes the continuous scroll work.
-        await _buildPages();
+        await _finishLoadingDoc(loadingTask, myToken);
         if (myToken !== _openToken) return; // superseded mid-build
 
-        _showState('pages');
-        _updatePagePill();
-
-        // Resume from wherever the user last left off in this document
-        const startPage = _loadSavedPage(_materialId, _totalPages);
-        _scrollToPage(startPage);
+        // Background-populate the on-device cache for next time — the
+        // document is already visible by this point, so this never
+        // delays anything the user is waiting on. Re-fetches the same
+        // signed URL (still valid for 90s) to get raw bytes, since
+        // PDF.js's own streamed load doesn't expose them. Scoped to
+        // 'summary' only, same reasoning as the read side above.
+        if (cacheable) {
+          fetch(signedUrl)
+            .then(r => (r.ok ? r.arrayBuffer() : null))
+            .then(buf => { if (buf && myToken === _openToken) MaterialCache.write(_materialId, buf); })
+            .catch(() => {}); // best-effort — a failed cache write just means next open isn't instant
+        }
 
       } catch (err) {
         if (myToken !== _openToken) return; // superseded — the newer open() owns error reporting now

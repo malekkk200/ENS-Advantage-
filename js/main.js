@@ -29,6 +29,8 @@
      adminPanel.js         — no-code admin PDF upload panel
      memeSystem.js         — GPA-bracket meme player (session-only, zero student data)
      memeAdmin.js          — admin interface for meme catalog management
+     appDownloadGate.js    — website-only "download the app" modal for Full Lesson taps
+     materialCache.js      — on-device byte cache for free ('summary') PDFs
      listeners.js          — document-level keydown/mousedown handlers
 ═══════════════════════════════════════════════════════════════ */
 import { $ } from './dom.js';
@@ -45,6 +47,7 @@ import { Community } from './community.js';
 import { Calc } from './calc.js';
 import { MemeSystem } from './memeSystem.js';
 import { MemeAdmin } from './memeAdmin.js';
+import { AppDownloadGate } from './appDownloadGate.js';
 import { BackNav } from './backNav.js';
 
 // Registers its own document-level 'mousedown' / 'keydown' listeners
@@ -56,7 +59,7 @@ import './nativeBridge.js';
    PUBLIC SURFACE — the only thing this module puts on `window`.
    Inline onclick="App.X.y()" handlers in the HTML call into this.
 ───────────────────────────────────────────────────────────── */
-window.App = { Auth, UI, Modules, Content, PDFViewer, AdminPanel, Protection, Subscription, Community, Calc, State, MemeAdmin };
+window.App = { Auth, UI, Modules, Content, PDFViewer, AdminPanel, Protection, Subscription, Community, Calc, State, MemeAdmin, AppDownloadGate };
 
 /* ─────────────────────────────────────────────────────────────
    BOOT

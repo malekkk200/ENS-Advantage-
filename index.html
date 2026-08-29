@@ -712,8 +712,30 @@
       <button class="viewer-close" onclick="App.Content.close()">✕</button>
     </div>
     <div class="viewer-body" id="cv-body">
-      <div class="watermark-layer" id="cv-watermark"></div>
       <div class="viewer-content" id="cv-content"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     APP DOWNLOAD GATE  (website only)
+     Shown instead of rendering a Full Lesson directly — see
+     js/appDownloadGate.js and js/content.js.
+═══════════════════════════════════════════════════════════════ -->
+<div id="app-gate-modal" class="modal-overlay hidden" onclick="App.AppDownloadGate.handleOverlayClick(event)">
+  <div class="modal-box app-gate-box" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">📱 Full Lessons Are In The App</div>
+      </div>
+      <button class="modal-close" onclick="App.AppDownloadGate.close()">✕</button>
+    </div>
+    <div class="modal-body app-gate-body">
+      <div class="app-gate-icon">📲</div>
+      <p class="app-gate-message">Download the app now to see the lessons</p>
+      <a id="app-gate-download-btn" class="app-gate-download-btn" href="#" target="_blank" rel="noopener noreferrer" onclick="App.AppDownloadGate.close()">
+        ⬇️ Download the App
+      </a>
     </div>
   </div>
 </div>
@@ -911,7 +933,7 @@
       </div>
 
       <!-- Pages container (hidden until PDF is rendered) — populated
-           dynamically with one wrapper+canvas+watermark per page for
+           dynamically with one wrapper+canvas per page for
            continuous vertical scroll. See PDFViewer._buildPages(). -->
       <div class="pdf-pages-container hidden" id="pdf-pages-container" oncontextmenu="return false;"></div>
 
@@ -919,7 +941,7 @@
 
     <!-- ── Security notice strip ─────────────────────────── -->
     <div class="pdf-security-strip">
-      🔒&nbsp; Content is protected &amp; watermarked — distribution is strictly prohibited
+      🔒&nbsp; Content is protected — distribution is strictly prohibited
     </div>
 
   </div><!-- /pdf-viewer-shell -->

@@ -15,6 +15,23 @@
   .modal-close { width: 32px; height: 32px; border: none; border-radius: 50%; background: var(--slate-100); cursor: pointer; font-size: 1.2rem; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: var(--slate-500); transition: background .15s; }
   .modal-close:hover { background: var(--slate-200); }
   .modal-body { padding: 1.75rem; }
+
+  /* ─── APP DOWNLOAD GATE (website only) ───
+     Re-uses .modal-overlay / .modal-box / .modal-header / .modal-title
+     / .modal-close / .modal-body above — only the gate-specific parts
+     below. See js/appDownloadGate.js. */
+  .app-gate-box { max-width: 420px; }
+  .app-gate-body { text-align: center; padding-top: 0.5rem; }
+  .app-gate-icon { font-size: 3rem; line-height: 1; margin-bottom: 1rem; }
+  .app-gate-message { font-size: 1.05rem; font-weight: 600; color: var(--slate-700); margin-bottom: 1.5rem; line-height: 1.6; }
+  .app-gate-download-btn {
+    display: flex; align-items: center; justify-content: center; gap: .5rem;
+    width: 100%; padding: .9rem; border-radius: var(--radius-md);
+    background: var(--accent); color: white; font-size: 1rem; font-weight: 700;
+    text-decoration: none; transition: background .2s; font-family: 'Inter', sans-serif;
+  }
+  .app-gate-download-btn:hover { background: var(--accent-hover); }
+
   .plan-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: .75rem; margin-bottom: 1.75rem; }
   @media (max-width: 480px) { .plan-grid { grid-template-columns: 1fr; } }
   .plan-card {

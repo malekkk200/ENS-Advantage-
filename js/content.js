@@ -8,7 +8,7 @@ import { State } from './state.js';
 import { $, escHtml, lockBodyScroll, unlockBodyScroll } from './dom.js';
 import { PDFViewer } from './pdfViewer.js';
 import { Subscription } from './subscription.js';
-import { paintWatermark } from './watermark.js';
+import { AppDownloadGate } from './appDownloadGate.js';
 import { BackNav } from './backNav.js';
 
 /* ─────────────────────────────────────────────────────────────
@@ -33,6 +33,20 @@ export const Content = {
     // only 'fullLesson' actually needs premium access here.
     if (type !== 'summary' && type !== 'guide' && !hasPrem) {
       Subscription.open(State.activeSemester);
+      return;
+    }
+
+    // Full lessons are no longer rendered on the website at all —
+    // subscribed students are sent to download the app instead, which
+    // is now the sole channel for this content (see appDownloadGate.js).
+    // This check runs unconditionally for 'fullLesson', before any
+    // course_materials lookup or content fetch, so no full-lesson PDF
+    // or HTML is ever requested from a web session past this point —
+    // whether this function was reached via the module list or called
+    // directly. Unsubscribed users are unaffected: they were already
+    // routed to the subscribe flow above and never reach this line.
+    if (type === 'fullLesson') {
+      AppDownloadGate.open();
       return;
     }
 
@@ -65,28 +79,12 @@ export const Content = {
     }
 
     // ── HTML fallback ──────────────────────────────────────────────
-    if (type === 'summary') {
-      this._showHtml(mod, type, this._summaryPlaceholder(mod));
-      return;
-    }
-
-    // Show loading state in the HTML overlay while we fetch
-    this._showHtml(mod, type,
-      '<div class="mock-content"><p style="text-align:center;padding:2rem">⏳ Loading…</p></div>');
-
-    const table = type === 'fullLesson' ? 'lessons' : 'guides';
-    const { data } = await sb
-      .from(table)
-      .select('content_html')
-      .eq('module_name', modName)
-      .eq('semester', State.activeSemester)
-      .single();
-
-    const safeHtml = DOMPurify.sanitize(
-      (data?.content_html) ? data.content_html : this._fallbackHtml(mod, type),
-      { USE_PROFILES: { html: true } }
-    );
-    $('cv-content').innerHTML = safeHtml;
+    // Only 'summary' can still reach this point — 'fullLesson' and
+    // 'guide' both returned above. (A trailing block used to sit here
+    // fetching from a 'lessons' table for a fullLesson HTML fallback;
+    // removed since it's now provably unreachable — 'fullLesson' never
+    // gets this far any more.)
+    this._showHtml(mod, type, this._summaryPlaceholder(mod));
   },
 
   /** Client-side cache for Comprehensive Guide TEXT only — separate from
@@ -194,10 +192,6 @@ export const Content = {
       });
     }
 
-    // The list above is plain buttons, not premium body text — hide
-    // the watermark layer PDFViewer/HTML premium content normally gets.
-    const wmLayer = $('cv-watermark');
-    if (wmLayer) wmLayer.innerHTML = '';
   },
 
   /** Called by the picker's onclick handlers. */
@@ -244,16 +238,12 @@ export const Content = {
     const body = $('cv-body');
     body.classList.remove('blurred');
 
-    // Watermark only for content that's actually paywalled (fullLesson).
-    // The Comprehensive Guide is free, so no watermark — but it's still
-    // "premium-grade" original content, so keep the same anti-screenshot
-    // blur-on-tab-switch protection summaries don't get.
-    const wmLayer = $('cv-watermark');
-    if (type === 'fullLesson') {
-      paintWatermark(wmLayer, { className: 'watermark-text' });
-    } else {
-      wmLayer.innerHTML = '';
-    }
+    // No watermark here any more — this overlay only ever shows free
+    // content now (summary / guide; 'fullLesson' is intercepted in
+    // open() above and never reaches this function). Note this type
+    // label is still used for the toolbar text below even though the
+    // 'fullLesson' branch is now unreachable via the module list —
+    // harmless dead mapping kept for clarity/documentation.
     State.contentViewerActive = (type !== 'summary');
     $('content-overlay').classList.remove('hidden');
     lockBodyScroll();

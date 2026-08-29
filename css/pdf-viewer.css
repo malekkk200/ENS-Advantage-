@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   SECURE CANVAS-BASED PDF VIEWER (toolbar, canvas, watermark, skeleton loader, security notice)
+   SECURE CANVAS-BASED PDF VIEWER (toolbar, canvas, skeleton loader, security notice)
 ═══════════════════════════════════════════════════════════════ */
 
   /* ══════════════════════════════════════════════════════════════
@@ -168,29 +168,6 @@
     width: 100%; height: 100%;
     /* Explicitly forbid context menu on canvas */
     pointer-events: auto;
-  }
-
-  /* Translucent watermark tiled over each page's canvas */
-  .pdf-watermark-layer {
-    position: absolute; inset: 0;
-    pointer-events: none; overflow: hidden;
-    z-index: 3;
-  }
-  .pdf-wm-text {
-    position: absolute;
-    font-size: 10px; font-weight: 700;
-    /* Navy at real opacity, not white-on-white — academic PDFs are
-       almost always light-background, so this is actually visible
-       (the previous white/.055 combo was nearly invisible on a white
-       page, which defeats the point: a watermark nobody can read in
-       a shared screenshot isn't a deterrent). */
-    color: rgba(15,31,61,.10);
-    white-space: nowrap;
-    transform: rotate(-32deg);
-    transform-origin: center;
-    letter-spacing: .05em;
-    font-family: 'Inter', sans-serif;
-    user-select: none; pointer-events: none;
   }
 
   /* Blur every page when the window loses focus (screenshot deterrent) */

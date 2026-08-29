@@ -14,6 +14,8 @@ import { Protection } from './protection.js';
 import { Subscription } from './subscription.js';
 import { AdminPanel } from './adminPanel.js';
 import { MemeAdmin } from './memeAdmin.js';
+import { AppDownloadGate } from './appDownloadGate.js';
+import { MaterialCache } from './materialCache.js';
 import { render } from './router.js';
 
 /* ─────────────────────────────────────────────────────────────
@@ -358,15 +360,21 @@ export const Auth = {
     Subscription.close();
     AdminPanel.close();
     MemeAdmin.close();
+    AppDownloadGate.close();
     await sb.auth.signOut();
     State.currentUser         = null;
     State.currentProfile      = null;
     State.dropdownOpen        = false;
     State.pdfViewerActive     = false;
     State.contentViewerActive = false;
+    State.appGateOpen         = false;
     // Invalidate cached materials — next login fetches a fresh,
     // subscription-accurate set from the database.
     CourseMaterials.invalidate();
+    // Same reasoning, for the on-device PDF byte cache (free summaries
+    // only — see materialCache.js) so a shared/public device doesn't
+    // keep serving a previous student's cached files after sign-out.
+    MaterialCache.clear();
     $('admin-dropdown-btn')?.classList.add('hidden');
     Protection.deactivate();
     render();
