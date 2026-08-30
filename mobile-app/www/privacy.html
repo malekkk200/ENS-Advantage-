@@ -40,7 +40,7 @@
       <table>
         <tr><th>Data</th><th>Collected when</th><th>Purpose</th></tr>
         <tr><td>Email address, password</td><td>Sign-up</td><td>Account identity and login. Your password is stored as a secure hash by our authentication provider (Supabase) — we never see or store it in plain text.</td></tr>
-        <tr><td>First name, last name, date of birth</td><td>Sign-up</td><td>Personalizing your account and displaying your identity in the content-security watermark (see §3).</td></tr>
+        <tr><td>First name, last name, date of birth</td><td>Sign-up</td><td>Personalizing your account.</td></tr>
         <tr><td>Full name, email, subscription plan, payment reference you submit</td><td>When you request a paid subscription</td><td>Manually verifying and activating your subscription. We do not process card payments or store card details — you send us a payment reference for a transaction made through your own payment method, and an admin verifies it.</td></tr>
         <tr><td>Device/session identifier, device type (e.g. "Chrome on Windows"), timestamps</td><td>Every time you sign in</td><td>Enforcing the single-device session policy described in §3.</td></tr>
         <tr><td>IP address, browser/device information, event type</td><td>Certain security-relevant events (login attempts, admin actions, screenshot/recording detection in the mobile apps)</td><td>Account security, fraud prevention, and investigating potential violations of our Terms of Service.</td></tr>
@@ -64,9 +64,9 @@
       real (though not absolute — see the honesty note below) steps to
       protect lesson content from being copied and redistributed:</p>
       <ul>
-        <li><strong>Watermarking</strong> — every page of premium (paid) lesson content is overlaid with a visible watermark showing your name, email, and the date/time you opened it. This is not extra data collection; it displays information you already gave us, directly on the page, as a deterrent and a way to trace leaked copies back to an account.</li>
+        <li><strong>Encrypted offline storage</strong> — when you open a lesson, a copy is stored on your device (encrypted, using a device-specific key that never leaves your phone) so you can reopen it later without a connection. This copy is unreadable outside the app — it cannot be browsed to or opened via your device's file manager — and is deleted, along with its encryption key, when you sign out.</li>
         <li><strong>Single-device session lock</strong> — your account can be signed in on one device at a time. Signing in on a new device automatically signs you out on the previous one.</li>
-        <li><strong>No download option</strong> — lessons are viewed in-app only; there is no button or link to download the underlying files.</li>
+        <li><strong>No download option</strong> — lessons are viewed in-app only; there is no button or link to export or share the underlying files.</li>
         <li><strong>Mobile app protections</strong> — on Android, the app sets a system-level flag that blocks screenshots and screen recording. On iOS, the app blacks out the screen for the duration of an active screen recording; a single screenshot cannot be technically blocked on iOS by any app (Apple provides no such capability), so instead it is detected and logged to your account for review.</li>
       </ul>
       <div class="legal-callout">

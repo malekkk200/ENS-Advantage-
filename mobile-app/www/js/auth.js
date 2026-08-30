@@ -15,6 +15,7 @@ import { Subscription } from './subscription.js';
 import { AdminPanel } from './adminPanel.js';
 import { MemeAdmin } from './memeAdmin.js';
 import { MaterialCache } from './materialCache.js';
+import { Modules } from './modules.js';
 import { render } from './router.js';
 
 /* ─────────────────────────────────────────────────────────────
@@ -38,12 +39,42 @@ export const Auth = {
         if (window.location.hash.includes('access_token')) {
           history.replaceState(null, '', window.location.pathname);
         }
-        if (State.currentUser.email_confirmed_at) {
-          await this.loadProfile();
-        }
       }
     } catch (e) { console.error('loadState:', e); }
+
+    // Reveal the app shell as soon as we know who's signed in from the
+    // (local, fast) session check — don't also wait on loadProfile()'s
+    // network round trip below before doing so. That extra wait was
+    // the actual remaining ~2s flash on the native app: the
+    // .returning-user pre-paint class already hid #auth-screen
+    // instantly, but render() itself (and therefore anything that
+    // depends on it, like this whole function finishing) used to sit
+    // blocked on a full user_profiles fetch first — on a mobile
+    // connection that's just reconnecting after the app was
+    // backgrounded/killed, that alone was often the whole visible
+    // delay the pre-paint trick was supposed to eliminate.
+    //
+    // UI.showMainApp() already renders sensible defaults with
+    // State.currentProfile still null (see UI.updateHeader()'s own
+    // null-guard and State.hasPremiumForSem()'s "no profile yet = no
+    // premium" fallback), and does its own one-time setup
+    // (Realtime.setup(), Sessions.claim(), Protection.activate(),
+    // Calc.init()) — those must only run once per app session, so
+    // render() is called exactly once here, not again below.
     render();
+
+    if (State.currentUser?.email_confirmed_at) {
+      // Fills in profile-dependent UI (header name/initials, S1/S2
+      // badges, admin-panel visibility, premium-gated module locks)
+      // the moment it actually lands, WITHOUT re-running render()'s
+      // one-time setup a second time.
+      this.loadProfile().then(() => {
+        if (!State.currentUser) return; // logged out again before this resolved
+        UI.updateHeader();
+        Modules.render(true);
+        Modules.updatePremiumNotice();
+      }).catch((e) => console.error('loadProfile (background):', e));
+    }
 
     sb.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session) {
@@ -366,11 +397,17 @@ export const Auth = {
     State.pdfViewerActive     = false;
     State.contentViewerActive = false;
     // Invalidate cached materials — next login fetches a fresh,
-    // subscription-accurate set from the database.
+    // subscription-accurate set from the database (and, since this
+    // fetch also drives the offline-fallback cache, invalidate()
+    // clears that persisted copy too — see courseMaterials.js).
     CourseMaterials.invalidate();
-    // Same reasoning, for the on-device PDF byte cache (free summaries
-    // only — see materialCache.js) so a shared/public device doesn't
-    // keep serving a previous student's cached files after sign-out.
+    // Deletes every cached lesson file (now covers both free and paid
+    // — see materialCache.js) AND the on-device AES key that encrypts
+    // them. Without that key, any leftover encrypted file left on
+    // disk (this delete should remove them regardless) is permanent,
+    // undecryptable garbage — this is what actually enforces "no
+    // offline access to paid content after sign-out" for a
+    // shared/public device, on top of it just being good hygiene.
     MaterialCache.clear();
     $('admin-dropdown-btn')?.classList.add('hidden');
     Protection.deactivate();

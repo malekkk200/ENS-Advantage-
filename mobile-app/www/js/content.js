@@ -8,7 +8,6 @@ import { State } from './state.js';
 import { $, escHtml, lockBodyScroll, unlockBodyScroll } from './dom.js';
 import { PDFViewer } from './pdfViewer.js';
 import { Subscription } from './subscription.js';
-import { paintWatermark } from './watermark.js';
 import { BackNav } from './backNav.js';
 
 /* ─────────────────────────────────────────────────────────────
@@ -194,10 +193,6 @@ export const Content = {
       });
     }
 
-    // The list above is plain buttons, not premium body text — hide
-    // the watermark layer PDFViewer/HTML premium content normally gets.
-    const wmLayer = $('cv-watermark');
-    if (wmLayer) wmLayer.innerHTML = '';
   },
 
   /** Called by the picker's onclick handlers. */
@@ -244,16 +239,11 @@ export const Content = {
     const body = $('cv-body');
     body.classList.remove('blurred');
 
-    // Watermark only for content that's actually paywalled (fullLesson).
-    // The Comprehensive Guide is free, so no watermark — but it's still
-    // "premium-grade" original content, so keep the same anti-screenshot
-    // blur-on-tab-switch protection summaries don't get.
-    const wmLayer = $('cv-watermark');
-    if (type === 'fullLesson') {
-      paintWatermark(wmLayer, { className: 'watermark-text' });
-    } else {
-      wmLayer.innerHTML = '';
-    }
+    // No watermark on any content type any more (see the watermark
+    // removal in pdfViewer.js's header comment for the parallel
+    // change there). Full lessons — the only content this ever
+    // watermarked — still get the anti-screenshot blur-on-tab-switch
+    // protection below; that's unrelated to watermarking and stays.
     State.contentViewerActive = (type !== 'summary');
     $('content-overlay').classList.remove('hidden');
     lockBodyScroll();

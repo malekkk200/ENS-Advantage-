@@ -51,17 +51,29 @@
        above. #auth-screen is visible by default in the markup and
        #main-app starts class="hidden"; without this, every load
        briefly shows the login screen while auth.js's async Supabase
-       session check resolves. Here we do a zero-network, synchronous
-       read of the session Supabase already persisted to localStorage
-       (see js/supabaseClient.js) and, if it looks unexpired, add
-       .returning-user to <html> so the paired <style> below hides
-       #auth-screen / reveals #main-app from the very first frame.
+       session check resolves.
+
+       The actual session/refresh token is now encrypted at rest via
+       the native SecureStorage plugin (see js/secureStorage.js +
+       js/supabaseClient.js) — reachable only through an async bridge
+       call, which by definition can't run before first paint. So
+       instead this reads a separate, deliberately NON-SENSITIVE hint
+       — 'ensAuthHint' in plain localStorage, mirrored by
+       supabaseClient.js's storage adapter every time it writes the
+       real (encrypted) token — containing only a boolean-ish "a
+       session existed, expiring around T" marker. It carries no
+       bearer credential and grants no access on its own; it exists
+       solely so this synchronous, zero-network check can decide
+       whether to add .returning-user to <html> so the paired <style>
+       below hides #auth-screen / reveals #main-app from the very
+       first frame.
 
        This is a COSMETIC decision only — it never grants access to
        anything. auth.js still performs the real, authoritative
-       Supabase session check/refresh in the background (and every
-       actual data request is still independently verified server-side
-       via RLS / Edge Function JWT checks regardless of this class).
+       Supabase session check/refresh in the background against the
+       encrypted store (and every actual data request is still
+       independently verified server-side via RLS / Edge Function JWT
+       checks regardless of this class).
        router.js removes .returning-user the instant that real check
        resolves, whichever way it goes — if the cached token turns out
        to be invalid/expired/revoked, the user is correctly bounced
@@ -70,10 +82,12 @@
        class regardless, so a stale cache can never hide the login
        screen from someone who genuinely needs to sign back in.
 
-       Kept intentionally identical to the root /index.html version —
-       this is shared frontend logic, not app-specific UI, so the two
-       copies should stay in sync even though they're edited/committed
-       separately per file (see the header note at the top of this file).
+       Unlike most other frontend logic in this file, this hint
+       mechanism is APP-SPECIFIC (the website has no encrypted-storage
+       layer to keep in sync with) — the root /index.html keeps its
+       own simpler version that reads Supabase's raw storage key
+       directly, which is correct there since the website's token
+       really does live in plain localStorage.
   ═══════════════════════════════════════════════════════════ -->
   <script>
     (function () {
@@ -106,22 +120,16 @@
         });
       }
       try {
-        var allKeys = Object.keys(localStorage);
-        window.__authDebug('localStorage keys:', allKeys);
-        var key = allKeys.find(function (k) {
-          return /^sb-.*-auth-token$/.test(k);
-        });
-        if (!key) { window.__authDebug('no sb-*-auth-token key found — showing login screen (expected if logged out / no cached session)'); return; }
-        var stored = JSON.parse(localStorage.getItem(key));
-        var session = (stored && stored.currentSession) || stored; // supabase-js v1/v2 shapes
-        var expiresAt = session && session.expires_at;
-        var hasToken = session && session.access_token;
-        window.__authDebug('key:', key, '| hasToken:', !!hasToken, '| expiresAt:', expiresAt, '| expiresAtMs:', expiresAt && expiresAt * 1000, '| nowMs:', Date.now(), '| unexpired:', !!(expiresAt && (expiresAt * 1000) > Date.now()));
-        if (hasToken && expiresAt && (expiresAt * 1000) > Date.now()) {
+        var hintRaw = localStorage.getItem('ensAuthHint');
+        if (!hintRaw) { window.__authDebug('no ensAuthHint found — showing login screen (expected if logged out / no cached session / first launch since this change)'); return; }
+        var hint = JSON.parse(hintRaw);
+        var unexpired = !!(hint && hint.hasToken && hint.expiresAt && (hint.expiresAt * 1000) > Date.now());
+        window.__authDebug('ensAuthHint:', hint, '| nowMs:', Date.now(), '| unexpired:', unexpired);
+        if (unexpired) {
           document.documentElement.classList.add('returning-user');
           window.__authDebug('added .returning-user to <html> — auth screen should be suppressed');
         } else {
-          window.__authDebug('token missing/expired — showing login screen (correct)');
+          window.__authDebug('hint missing/expired — showing login screen (correct)');
         }
       } catch (e) { window.__authDebug('EXCEPTION, falling back to showing login screen:', e && e.message); }
     })();
@@ -736,7 +744,6 @@
       <button class="viewer-close" onclick="App.Content.close()">✕</button>
     </div>
     <div class="viewer-body" id="cv-body">
-      <div class="watermark-layer" id="cv-watermark"></div>
       <div class="viewer-content" id="cv-content"></div>
     </div>
   </div>
@@ -935,7 +942,7 @@
       </div>
 
       <!-- Pages container (hidden until PDF is rendered) — populated
-           dynamically with one wrapper+canvas+watermark per page for
+           dynamically with one wrapper+canvas per page for
            continuous vertical scroll. See PDFViewer._buildPages(). -->
       <div class="pdf-pages-container hidden" id="pdf-pages-container" oncontextmenu="return false;"></div>
 
@@ -943,7 +950,7 @@
 
     <!-- ── Security notice strip ─────────────────────────── -->
     <div class="pdf-security-strip">
-      🔒&nbsp; Content is protected &amp; watermarked — distribution is strictly prohibited
+      🔒&nbsp; Content is protected — distribution is strictly prohibited
     </div>
 
   </div><!-- /pdf-viewer-shell -->

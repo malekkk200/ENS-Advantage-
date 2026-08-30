@@ -2,6 +2,20 @@
    COURSE MATERIALS
 ═══════════════════════════════════════════════════════════════ */
 import { sb } from './supabaseClient.js';
+import { State } from './state.js';
+
+// Persisted per-account (not per-device) so this metadata is available
+// on a later offline launch — without it, Content.open() has no way
+// to know a full lesson/summary even HAS a cached PDF to render from
+// materialCache.js's encrypted store, offline or not. RLS already
+// scoped what got fetched here in the first place; this is just a
+// local mirror of that same already-filtered result, not a new access
+// path — see the class comment below. Scoped by user id so a second
+// account signing in on the same device never sees a stale mix of the
+// previous account's material list before their own fresh sync lands.
+function persistKey() {
+  return `ensCourseMaterialsCache_v1_${State.currentUser?.id || 'anon'}`;
+}
 
 /* ─────────────────────────────────────────────────────────────
    COURSE MATERIALS
@@ -47,6 +61,7 @@ export const CourseMaterials = {
       if (error) {
         console.error('[CourseMaterials.load] DB error:', error.message);
         this._cache = null; // allow retry on next call
+        this._loadFromPersistedCache(); // offline (or any DB error) fallback
         return;
       }
 
@@ -63,11 +78,39 @@ export const CourseMaterials = {
           this._cache.set(key, [entry]);
         }
       }
+
+      try {
+        localStorage.setItem(persistKey(), JSON.stringify(Array.from(this._cache.entries())));
+      } catch (_) { /* quota / private-browsing — non-fatal, just no offline fallback next launch */ }
+
     } catch (err) {
       console.error('[CourseMaterials.load] Unexpected error:', err);
       this._cache = null;
+      this._loadFromPersistedCache();
     } finally {
       this._loading = false;
+    }
+  },
+
+  /**
+   * Offline (or any fetch failure) fallback — rehydrates from the
+   * last successfully synced copy for the CURRENT account, so a
+   * student can still open lessons/summaries they've already cached
+   * (see materialCache.js) without a connection. If there's no
+   * persisted copy yet (first-ever launch with no connectivity), this
+   * is a no-op and _cache stays null / getAll() keeps returning [] —
+   * there's genuinely nothing to fall back to in that specific case.
+   */
+  _loadFromPersistedCache() {
+    try {
+      const raw = localStorage.getItem(persistKey());
+      if (!raw) return;
+      const entries = JSON.parse(raw);
+      this._cache = new Map(entries);
+      console.info('[CourseMaterials.load] Using last-synced offline copy.');
+    } catch (err) {
+      console.warn('[CourseMaterials._loadFromPersistedCache] failed:', err);
+      this._cache = null;
     }
   },
 
@@ -93,6 +136,7 @@ export const CourseMaterials = {
 
   /** Call on logout so the next login fetches a fresh, access-correct set */
   invalidate() {
+    try { localStorage.removeItem(persistKey()); } catch (_) {}
     this._cache   = null;
     this._loading = false;
   }

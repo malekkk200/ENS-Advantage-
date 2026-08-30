@@ -95,14 +95,6 @@
     overscroll-behavior: contain;
   }
   .viewer-body.blurred { filter: blur(6px); }
-  .watermark-layer {
-    position: absolute; inset: 0; z-index: 1; pointer-events: none; overflow: hidden;
-  }
-  .watermark-text {
-    position: absolute; color: rgba(15,31,61,.10); font-size: .72rem; font-weight: 700;
-    white-space: nowrap; transform: rotate(-30deg); transform-origin: center; letter-spacing: .04em;
-    user-select: none; pointer-events: none;
-  }
   .viewer-content { position: relative; z-index: 2; }
 
   /* Comprehensive Guide content (guide-images/text uploaded via the
