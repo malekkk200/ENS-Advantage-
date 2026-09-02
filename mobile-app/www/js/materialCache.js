@@ -81,6 +81,30 @@ function secureKeyName() {
 
 let _cryptoKeyPromise = null; // memoized per this page-load; reset on logout (see resetCryptoKey)
 
+// Guards against a hung native SecureStorage bridge call. Now that
+// write() is directly awaited in PDFViewer's critical path (not
+// fire-and-forget any more — see pdfViewer.js for why), a genuinely
+// hung plugin call would otherwise block the whole PDF viewer
+// indefinitely instead of just silently skipping the cache. Wider than
+// secureStorage.js's own per-call timeout (3s) since _getCryptoKey()
+// can chain up to two sequential bridge calls (getItem, then setItem
+// on first use) — this bounds the TOTAL, not each individual call. A
+// slow but eventually-successful call is still allowed to finish
+// normally via the memoized _cryptoKeyPromise on a later
+// read()/write() — this only stops the CURRENT call from waiting
+// forever.
+const KEY_TIMEOUT_MS = 7000;
+
+function _withTimeout(promise, ms, label) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    promise.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); }
+    );
+  });
+}
+
 /**
  * Lazily creates (once per device+account) or loads the AES-256 key
  * used to encrypt/decrypt everything in this cache. Imported as a
@@ -135,7 +159,7 @@ export const MaterialCache = {
       const packed = new Uint8Array(await hit.arrayBuffer());
       const iv         = packed.slice(0, IV_BYTES);
       const ciphertext = packed.slice(IV_BYTES);
-      const key = await _getCryptoKey();
+      const key = await _withTimeout(_getCryptoKey(), KEY_TIMEOUT_MS, 'MaterialCache read: key acquisition');
       const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext);
 
       touchOrder(materialId);
@@ -154,7 +178,7 @@ export const MaterialCache = {
   async write(materialId, arrayBuffer) {
     if (!materialId || !arrayBuffer || !('caches' in window)) return;
     try {
-      const key = await _getCryptoKey();
+      const key = await _withTimeout(_getCryptoKey(), KEY_TIMEOUT_MS, 'MaterialCache write: key acquisition');
       const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
       const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, arrayBuffer);
 

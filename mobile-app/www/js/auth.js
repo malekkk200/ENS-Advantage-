@@ -54,13 +54,17 @@ export const Auth = {
     // backgrounded/killed, that alone was often the whole visible
     // delay the pre-paint trick was supposed to eliminate.
     //
-    // UI.showMainApp() already renders sensible defaults with
-    // State.currentProfile still null (see UI.updateHeader()'s own
-    // null-guard and State.hasPremiumForSem()'s "no profile yet = no
-    // premium" fallback), and does its own one-time setup
-    // (Realtime.setup(), Sessions.claim(), Protection.activate(),
-    // Calc.init()) — those must only run once per app session, so
-    // render() is called exactly once here, not again below.
+    // Restore the last-synced profile from localStorage FIRST — this
+    // is what actually makes the header/avatar and every premium
+    // check correct on the very first paint (offline or not), rather
+    // than sitting null (blank avatar, "premium required" everywhere)
+    // until loadProfile()'s background fetch either lands or fails.
+    this._restoreProfileFromCache();
+
+    // UI.showMainApp() does its own one-time setup (Realtime.setup(),
+    // Sessions.claim(), Protection.activate(), Calc.init()) — those
+    // must only run once per app session, so render() is called
+    // exactly once here, not again below.
     render();
 
     if (State.currentUser?.email_confirmed_at) {
@@ -103,7 +107,38 @@ export const Auth = {
       .select('*')
       .eq('id', State.currentUser.id)
       .single();
-    if (data) State.currentProfile = data;
+    if (data) {
+      State.currentProfile = data;
+      try {
+        localStorage.setItem(this._profilePersistKey(), JSON.stringify(data));
+      } catch (_) { /* quota / private-browsing — non-fatal, just no offline fallback next launch */ }
+    }
+  },
+
+  /**
+   * Instant, zero-network restore of the last-synced profile — read
+   * synchronously from localStorage and applied to State.currentProfile
+   * right away, so the header (avatar initials, name) and every
+   * premium-gated check (State.hasPremiumForSem()) have something
+   * correct to work with on the very first paint, offline or not,
+   * instead of sitting null until loadProfile()'s background network
+   * fetch either lands or gives up. That background fetch (already
+   * fire-and-forget from loadState(), see below) still runs and
+   * overwrites this with fresher data the moment it succeeds.
+   */
+  _restoreProfileFromCache() {
+    if (!State.currentUser) return;
+    try {
+      const raw = localStorage.getItem(this._profilePersistKey());
+      if (!raw) return;
+      State.currentProfile = JSON.parse(raw);
+    } catch (err) {
+      console.warn('[Auth._restoreProfileFromCache] failed:', err);
+    }
+  },
+
+  _profilePersistKey() {
+    return `ensUserProfileCache_v1_${State.currentUser?.id || 'anon'}`;
   },
 
   switchMode(mode) {
@@ -391,11 +426,14 @@ export const Auth = {
     AdminPanel.close();
     MemeAdmin.close();
     await sb.auth.signOut();
-    State.currentUser         = null;
-    State.currentProfile      = null;
-    State.dropdownOpen        = false;
-    State.pdfViewerActive     = false;
-    State.contentViewerActive = false;
+    // Everything below that's scoped per-account (persisted profile,
+    // course-materials metadata, the lesson-cache encryption key) has
+    // to run BEFORE State.currentUser is cleared — each of those reads
+    // State.currentUser.id to find the right key to remove. Clearing
+    // the user first was a bug: every one of these calls would have
+    // silently targeted a generic 'anon' key instead of the real
+    // account's, leaving the actual per-account data uncleared.
+    try { localStorage.removeItem(this._profilePersistKey()); } catch (_) {}
     // Invalidate cached materials — next login fetches a fresh,
     // subscription-accurate set from the database (and, since this
     // fetch also drives the offline-fallback cache, invalidate()
@@ -408,7 +446,18 @@ export const Auth = {
     // undecryptable garbage — this is what actually enforces "no
     // offline access to paid content after sign-out" for a
     // shared/public device, on top of it just being good hygiene.
-    MaterialCache.clear();
+    // Awaited (not fire-and-forget) — it reads State.currentUser.id
+    // internally to find the right key, so it has to actually finish
+    // before that gets cleared just below; not awaiting it would let
+    // logout()'s own next line race ahead of it, which is exactly the
+    // ordering bug this whole block was just rewritten to fix.
+    await MaterialCache.clear();
+
+    State.currentUser         = null;
+    State.currentProfile      = null;
+    State.dropdownOpen        = false;
+    State.pdfViewerActive     = false;
+    State.contentViewerActive = false;
     $('admin-dropdown-btn')?.classList.add('hidden');
     Protection.deactivate();
     render();

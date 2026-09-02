@@ -41,18 +41,37 @@ function bridge() {
   }
 }
 
+// Bounds how long any single native bridge call is waited on. Native
+// plugin calls are a black box from here — if one ever genuinely hangs
+// (rather than resolving or rejecting) on some device/OS combination,
+// nothing downstream should wait on it forever; every caller in this
+// app is written to treat a timeout exactly like any other failure
+// (fall back to a less-secure-but-functional path, or simply "don't
+// cache this one").
+const CALL_TIMEOUT_MS = 3000;
+
+function withTimeout(promise, label) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} timed out after ${CALL_TIMEOUT_MS}ms`)), CALL_TIMEOUT_MS);
+    promise.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); }
+    );
+  });
+}
+
 export const SecureStorageBridge = {
   /** True only when running in the native app AND the plugin is registered. */
   isAvailable() {
     return !!bridge();
   },
 
-  /** Returns the stored string, or null if absent / unavailable / on any error. Never throws. */
+  /** Returns the stored string, or null if absent / unavailable / on any error (including a timeout). Never throws. */
   async getItem(key) {
     const plugin = bridge();
     if (!plugin) { debugLog('getItem: plugin unavailable, key=', key); return null; }
     try {
-      const result = await plugin.getItem({ key });
+      const result = await withTimeout(plugin.getItem({ key }), `getItem(${key})`);
       // The plugin's low-level getItem() returns { value } (mirrors
       // @capacitor/preferences' shape by the author's own design —
       // see its README) or null/undefined for a missing key.
@@ -66,12 +85,12 @@ export const SecureStorageBridge = {
     }
   },
 
-  /** Returns true on success, false on any failure (plugin unavailable, native error, etc). Never throws. */
+  /** Returns true on success, false on any failure (plugin unavailable, native error, timeout, etc). Never throws. */
   async setItem(key, value) {
     const plugin = bridge();
     if (!plugin) { debugLog('setItem: plugin unavailable, key=', key); return false; }
     try {
-      await plugin.setItem({ key, value: String(value) });
+      await withTimeout(plugin.setItem({ key, value: String(value) }), `setItem(${key})`);
       debugLog('setItem OK key=', key);
       return true;
     } catch (err) {
@@ -86,7 +105,7 @@ export const SecureStorageBridge = {
     const plugin = bridge();
     if (!plugin) return;
     try {
-      await plugin.removeItem({ key });
+      await withTimeout(plugin.removeItem({ key }), `removeItem(${key})`);
       debugLog('removeItem OK key=', key);
     } catch (err) {
       debugLog('removeItem FAILED key=', key, 'err=', err?.message || err);

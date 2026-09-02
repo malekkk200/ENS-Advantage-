@@ -27,6 +27,17 @@ function persistKey() {
    exclusively through a short-lived signed URL generated at
    open-time by createSignedUrl(), so any leaked cache entry
    is completely useless without a valid Supabase session.
+
+   load() is cache-first, not network-first: if a persisted copy
+   exists for the current account, it's applied synchronously and
+   load() returns immediately, with the network fetch happening
+   afterward in the background. This matters a lot offline — a
+   fetch() to an unreachable host doesn't fail instantly, it can take
+   several seconds to time out, and the caller here
+   (UI.showMainApp()) awaits this before rendering anything. Waiting
+   on that timeout before falling back to the cache is what caused a
+   multi-second blank screen on a cold offline launch even though a
+   perfectly good cached copy existed the whole time.
 ───────────────────────────────────────────────────────────── */
 export const CourseMaterials = {
   // Map< "sem:moduleName:category" → Array<{ id, title, storagePath }> >
@@ -38,10 +49,23 @@ export const CourseMaterials = {
   _loading: false,
 
   async load() {
-    // Return immediately if already loaded or a load is in progress
     if (this._cache !== null || this._loading) return;
+
+    if (this._applyPersistedCache()) {
+      // Refresh silently in the background — doesn't block whoever's
+      // awaiting load() right now.
+      this._fetchAndPersist().catch(() => {});
+      return;
+    }
+
+    // No persisted copy for this account — nothing to show either
+    // way, so it's correct to actually wait on the network here.
+    await this._fetchAndPersist();
+  },
+
+  async _fetchAndPersist() {
     this._loading = true;
-    this._cache   = new Map();
+    if (this._cache === null) this._cache = new Map();
 
     try {
       // RLS on the server ensures the user only receives rows they
@@ -60,11 +84,16 @@ export const CourseMaterials = {
 
       if (error) {
         console.error('[CourseMaterials.load] DB error:', error.message);
-        this._cache = null; // allow retry on next call
-        this._loadFromPersistedCache(); // offline (or any DB error) fallback
+        // Only wipe the cache if there was nothing already in it
+        // (i.e. this was the primary fetch, not a background refresh
+        // of an already-applied persisted copy) — a failed refresh
+        // should never regress a student from "has offline access to
+        // their cached lessons" back to "has nothing."
+        if (this._cache.size === 0) this._cache = null;
         return;
       }
 
+      const fresh = new Map();
       for (const row of (data || [])) {
         const key = `${row.semester}:${row.module_name}:${row.category}`;
         const entry = {
@@ -72,12 +101,13 @@ export const CourseMaterials = {
           title:        row.title,
           storagePath:  row.storage_path
         };
-        if (this._cache.has(key)) {
-          this._cache.get(key).push(entry);
+        if (fresh.has(key)) {
+          fresh.get(key).push(entry);
         } else {
-          this._cache.set(key, [entry]);
+          fresh.set(key, [entry]);
         }
       }
+      this._cache = fresh;
 
       try {
         localStorage.setItem(persistKey(), JSON.stringify(Array.from(this._cache.entries())));
@@ -85,32 +115,25 @@ export const CourseMaterials = {
 
     } catch (err) {
       console.error('[CourseMaterials.load] Unexpected error:', err);
-      this._cache = null;
-      this._loadFromPersistedCache();
+      if (this._cache.size === 0) this._cache = null;
     } finally {
       this._loading = false;
     }
   },
 
-  /**
-   * Offline (or any fetch failure) fallback — rehydrates from the
-   * last successfully synced copy for the CURRENT account, so a
-   * student can still open lessons/summaries they've already cached
-   * (see materialCache.js) without a connection. If there's no
-   * persisted copy yet (first-ever launch with no connectivity), this
-   * is a no-op and _cache stays null / getAll() keeps returning [] —
-   * there's genuinely nothing to fall back to in that specific case.
-   */
-  _loadFromPersistedCache() {
+  /** Synchronous, zero-network. Returns true if a persisted copy was found and applied. */
+  _applyPersistedCache() {
     try {
       const raw = localStorage.getItem(persistKey());
-      if (!raw) return;
+      if (!raw) return false;
       const entries = JSON.parse(raw);
       this._cache = new Map(entries);
-      console.info('[CourseMaterials.load] Using last-synced offline copy.');
+      console.info('[CourseMaterials] Using last-synced offline copy.');
+      return true;
     } catch (err) {
-      console.warn('[CourseMaterials._loadFromPersistedCache] failed:', err);
+      console.warn('[CourseMaterials._applyPersistedCache] failed:', err);
       this._cache = null;
+      return false;
     }
   },
 
@@ -141,4 +164,3 @@ export const CourseMaterials = {
     this._loading = false;
   }
 };
-

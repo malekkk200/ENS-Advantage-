@@ -555,7 +555,7 @@ export const PDFViewer = (() => {
         return;
       }
 
-      // ── 2. Load the PDF via PDF.js ─────────────────────────
+      // ── 2. Fetch the document bytes once, then load via PDF.js ──
       try {
         // Point the worker at the same CDN version as the main script
         if (window.pdfjsLib) {
@@ -563,53 +563,53 @@ export const PDFViewer = (() => {
             'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
         }
 
+        // Fetch the bytes ONCE, rather than letting PDF.js stream from
+        // the signed URL and separately re-downloading afterward
+        // (un-awaited, in the background) to populate the cache. That
+        // was two independent network operations racing against
+        // whatever the user did next — if the app was backgrounded or
+        // connectivity dropped before that second fetch finished, the
+        // document simply never got cached, even though it had just
+        // opened successfully seconds earlier. This is very likely
+        // exactly what happened on a real-device test: open online
+        // (renders fine, streamed), toggle airplane mode almost
+        // immediately, reopen — the background copy never had time to
+        // land. Fetching once and using the SAME bytes for both
+        // rendering and the cache write below removes that race
+        // entirely, trading away PDF.js' progressive "start rendering
+        // before the whole file arrives" streaming — an acceptable
+        // cost for these file sizes against a much more important
+        // guarantee, for a feature whose entire point is reliable
+        // offline access.
+        const response = await fetch(signedUrl, {
+          // Don't let the browser's own HTTP cache hold a copy keyed
+          // to a URL that's only valid for the next 90 seconds anyway.
+          headers: { 'Cache-Control': 'no-store' }
+        });
+        if (myToken !== _openToken) return; // superseded while awaiting
+        if (!response.ok) throw new Error(`Failed to download document (status ${response.status})`);
+        const arrayBuffer = await response.arrayBuffer();
+        if (myToken !== _openToken) return; // superseded while awaiting
+
         const loadingTask = window.pdfjsLib.getDocument({
-          url:          signedUrl,
-          // Prevents browser from caching the signed URL response
-          httpHeaders:  { 'Cache-Control': 'no-store' },
+          data:       arrayBuffer,
           // Standard CMap support for non-Latin character sets
-          cMapUrl:      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
-          cMapPacked:   true,
-          // Stream the file progressively — don't wait for full download
-          disableRange:  false,
-          disableStream: false,
-          // Disable the text layer (nothing selectable) and annotation layer
-          // (no internal hyperlinks rendered that could hint at structure)
+          cMapUrl:    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+          cMapPacked: true,
         });
 
-        _pdfDoc     = await loadingTask.promise;
-        if (myToken !== _openToken) { // superseded while awaiting — don't touch the newer viewer's state
-          try { await _pdfDoc.destroy(); } catch (_) {}
-          return;
-        }
-        _totalPages = _pdfDoc.numPages;
-
-        // Build every page's wrapper/canvas up front (sized
-        // correctly from real dimensions) and start the lazy-render
-        // observer — this is what makes the continuous scroll work.
-        await _buildPages();
+        await _finishLoadingDoc(loadingTask, myToken);
         if (myToken !== _openToken) return; // superseded mid-build
 
-        _showState('pages');
-        _updatePagePill();
-
-        // Resume from wherever the user last left off in this document
-        const startPage = _loadSavedPage(_materialId, _totalPages);
-        _scrollToPage(startPage);
-
-        // Background-populate the on-device (encrypted) cache for next
-        // time — the document is already visible by this point, so
-        // this never delays anything the user is waiting on.
-        // Re-fetches the same signed URL (still valid for 90s) to get
-        // raw bytes, since PDF.js's own streamed load doesn't expose
-        // them. Covers both 'summary' and 'fullLesson' now — see the
-        // read side above and materialCache.js for why encryption
-        // makes that safe for paid content too.
+        // Populate the on-device (encrypted) cache using the exact
+        // same bytes just rendered — awaited here, not fire-and-
+        // forget, so caching genuinely completes before open()
+        // returns instead of racing against whatever happens next.
+        // Covers both 'summary' and 'fullLesson' now — see the read
+        // side above and materialCache.js for why encryption makes
+        // that safe for paid content too.
         if (cacheable) {
-          fetch(signedUrl)
-            .then(r => (r.ok ? r.arrayBuffer() : null))
-            .then(buf => { if (buf && myToken === _openToken) MaterialCache.write(_materialId, buf); })
-            .catch(() => {}); // best-effort — a failed cache write just means next open isn't instant
+          await MaterialCache.write(_materialId, arrayBuffer);
         }
 
       } catch (err) {
@@ -619,6 +619,12 @@ export const PDFViewer = (() => {
           _setError('Invalid or corrupted document. Please contact support.');
         } else if (err?.name === 'MissingPDFException' || err?.status === 403) {
           _setError('Document link expired. Please close and reopen the content.');
+        } else if (err instanceof TypeError) {
+          // fetch() throws a bare TypeError for a network-level
+          // failure (no connectivity, DNS, etc.) — distinct from a
+          // successful response with a bad status, which is handled
+          // by the branches above and below.
+          _setError('Connection problem loading this document. Please check your internet connection and try again.');
         } else {
           _setError('Failed to load document. Please try again.');
         }
