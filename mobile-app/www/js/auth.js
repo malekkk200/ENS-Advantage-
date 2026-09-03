@@ -33,14 +33,32 @@ export const Auth = {
 
   async loadState() {
     try {
-      const { data: { session } } = await sb.auth.getSession();
+      const { data: { session }, error } = await sb.auth.getSession();
       if (session) {
         State.currentUser = session.user;
         if (window.location.hash.includes('access_token')) {
           history.replaceState(null, '', window.location.pathname);
         }
+      } else if (error && window.supabase.isAuthRetryableFetchError(error)) {
+        // Cold, fully-offline launch with an access token whose real
+        // expiry had already passed: getSession() couldn't reach the
+        // network to refresh it, so it correctly withheld a session it
+        // couldn't verify. Fall back to the identity already sitting in
+        // encrypted storage from the last time this device was online,
+        // purely so the offline UI (cached profile/curriculum/materials
+        // below) renders instead of the login screen. See
+        // Supabase.getStoredSessionUser for why this can't grant any
+        // server-side access it doesn't already have.
+        State.currentUser = await Supabase.getStoredSessionUser();
       }
-    } catch (e) { console.error('loadState:', e); }
+    } catch (e) {
+      console.error('loadState:', e);
+      // Defensive mirror of the branch above, in case a future
+      // supabase-js version throws this instead of resolving it.
+      if (window.supabase.isAuthRetryableFetchError(e)) {
+        State.currentUser = await Supabase.getStoredSessionUser();
+      }
+    }
 
     // Reveal the app shell as soon as we know who's signed in from the
     // (local, fast) session check — don't also wait on loadProfile()'s

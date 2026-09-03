@@ -117,6 +117,42 @@ export const Supabase = (() => {
     url: URL,
     key: KEY,
     /**
+     * Offline-only fallback for Auth.loadState(): reads the session
+     * straight out of encrypted storage (the exact same adapter/key
+     * supabase-js itself reads from), bypassing getSession()'s
+     * network-dependent refresh entirely.
+     *
+     * Why this is needed: on a cold app launch, if the stored access
+     * token's real expiry (not just its proactive refresh margin) has
+     * already passed, getSession() tries to refresh it over the
+     * network before resolving. Offline, that refresh fails and
+     * getSession() correctly returns `session: null` — even though a
+     * valid refresh token (and the identity that goes with it) is
+     * sitting right there in encrypted storage. Call this ONLY when
+     * getSession() failed with isAuthRetryableFetchError (a network
+     * failure, not an invalid/revoked session) — see Auth.loadState().
+     *
+     * This is a UI-only trust decision, never an authorization one:
+     * the user object returned here is exactly what was already
+     * signed in on this device. Every subsequent server call still
+     * carries this same (possibly stale) JWT and is checked by
+     * RLS/Edge Functions exactly as always — a genuinely revoked
+     * session fails those calls the moment the device is back online,
+     * same as it always would. Returns null on any parse/shape
+     * failure so callers fall back to the normal logged-out state.
+     */
+    async getStoredSessionUser() {
+      try {
+        const raw = await encryptedAuthStorage.getItem(client.auth.storageKey);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        const session = parsed?.currentSession ?? parsed; // supabase-js has used both shapes across versions
+        return session?.user ?? null;
+      } catch (_) {
+        return null;
+      }
+    },
+    /**
      * Wraps the apikey header automatically for Edge Functions.
      * Also attaches the user's JWT so server-side functions can verify identity
      * without trusting any user-supplied IDs in the request body.

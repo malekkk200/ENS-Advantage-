@@ -76,11 +76,23 @@
        checks regardless of this class).
        router.js removes .returning-user the instant that real check
        resolves, whichever way it goes — if the cached token turns out
-       to be invalid/expired/revoked, the user is correctly bounced
-       back to the login screen at that point. The inline script at
-       the end of <body> is a bounded (4s) safety net that clears the
-       class regardless, so a stale cache can never hide the login
-       screen from someone who genuinely needs to sign back in.
+       to be invalid/revoked, the user is correctly bounced back to
+       the login screen at that point. The inline script at the end
+       of <body> is a bounded (4s) safety net that clears the class
+       regardless, so a stale cache can never hide the login screen
+       from someone who genuinely needs to sign back in.
+
+       This decision deliberately does NOT gate on hint.expiresAt —
+       only on whether a session hint exists at all. An access token
+       expiring is routine (they last ~1hr) and does not mean the
+       user is signed out: auth.js's real check transparently
+       refreshes it when online, and falls back to the still-valid
+       refresh token already in encrypted storage when offline (see
+       Auth.loadState() / Supabase.getStoredSessionUser()). Gating
+       this cosmetic guess on expiry would flash the login screen on
+       every cold launch more than ~1hr after the last one — exactly
+       the "everything appears" offline case this hint exists to
+       cover — only for the real check to immediately reverse it.
 
        Unlike most other frontend logic in this file, this hint
        mechanism is APP-SPECIFIC (the website has no encrypted-storage
@@ -123,13 +135,16 @@
         var hintRaw = localStorage.getItem('ensAuthHint');
         if (!hintRaw) { window.__authDebug('no ensAuthHint found — showing login screen (expected if logged out / no cached session / first launch since this change)'); return; }
         var hint = JSON.parse(hintRaw);
-        var unexpired = !!(hint && hint.hasToken && hint.expiresAt && (hint.expiresAt * 1000) > Date.now());
-        window.__authDebug('ensAuthHint:', hint, '| nowMs:', Date.now(), '| unexpired:', unexpired);
-        if (unexpired) {
+        // Intentionally NOT checking hint.expiresAt here — see the
+        // comment above this script for why an expired access token
+        // must not flash the login screen.
+        var hadSession = !!(hint && hint.hasToken);
+        window.__authDebug('ensAuthHint:', hint, '| nowMs:', Date.now(), '| hadSession:', hadSession);
+        if (hadSession) {
           document.documentElement.classList.add('returning-user');
           window.__authDebug('added .returning-user to <html> — auth screen should be suppressed');
         } else {
-          window.__authDebug('hint missing/expired — showing login screen (correct)');
+          window.__authDebug('no prior session hint — showing login screen (correct)');
         }
       } catch (e) { window.__authDebug('EXCEPTION, falling back to showing login screen:', e && e.message); }
     })();
