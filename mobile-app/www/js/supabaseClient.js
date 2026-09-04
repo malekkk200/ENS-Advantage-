@@ -153,18 +153,67 @@ export const Supabase = (() => {
       }
     },
     /**
+     * Resolves a fresh access token for an authenticated Edge Function
+     * call, tolerating a single transient network blip during the
+     * token refresh itself.
+     *
+     * Bug this fixes: client.auth.getSession() silently attempts a
+     * network refresh whenever the stored access token's real expiry
+     * has passed (same underlying mechanism as the offline cold-launch
+     * fix in auth.js). Calling it unguarded here meant ANY admin write
+     * — upload material, upload/delete guide, upload/toggle/delete meme
+     * — would throw a raw, uncaught error the instant that refresh hit
+     * even a brief mobile-network hiccup, which every caller then
+     * displayed as the same opaque "network error" message regardless
+     * of what actually went wrong.
+     *
+     * Fix: retry the refresh once after a short delay (mobile network
+     * blips are usually sub-second) before giving up, and return a
+     * specific, honest reason when it still fails — expired session
+     * vs. genuine connectivity trouble — instead of throwing. This
+     * changes nothing about the security boundary: a genuinely invalid
+     * or revoked session still cannot obtain a token here, and every
+     * Edge Function still independently re-verifies the caller
+     * server-side regardless of what this returns.
+     */
+    async _getAccessTokenForRequest() {
+      const attempt = async () => {
+        const { data: { session } } = await client.auth.getSession();
+        return session?.access_token ?? null;
+      };
+      try {
+        const token = await attempt();
+        if (token) return { ok: true, token };
+        return { ok: false, message: 'انتهت صلاحية الجلسة. الرجاء تسجيل الخروج ثم الدخول مجدداً.' };
+      } catch (err) {
+        if (!window.supabase.isAuthRetryableFetchError(err)) {
+          return { ok: false, message: 'انتهت صلاحية الجلسة. الرجاء تسجيل الخروج ثم الدخول مجدداً.' };
+        }
+        await new Promise((r) => setTimeout(r, 800)); // one bounded retry for a transient blip
+        try {
+          const token = await attempt();
+          if (token) return { ok: true, token };
+          return { ok: false, message: 'خطأ في الشبكة. تحقق من اتصالك وحاول مجدداً.' };
+        } catch (_err2) {
+          return { ok: false, message: 'خطأ في الشبكة. تحقق من اتصالك وحاول مجدداً.' };
+        }
+      }
+    },
+    /**
      * Wraps the apikey header automatically for Edge Functions.
      * Also attaches the user's JWT so server-side functions can verify identity
      * without trusting any user-supplied IDs in the request body.
      */
     async callFunction(name, body) {
-      const { data: { session } } = await client.auth.getSession();
-      const authHeader = session?.access_token
-        ? { 'Authorization': `Bearer ${session.access_token}` }
-        : {};
+      const tokenResult = await this._getAccessTokenForRequest();
+      if (!tokenResult.ok) return { ok: false, json: { error: tokenResult.message } };
       const res = await fetch(`${URL}/functions/v1/${name}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', apikey: KEY, ...authHeader },
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: KEY,
+          Authorization: `Bearer ${tokenResult.token}`
+        },
         body: JSON.stringify(body)
       });
       let json = {};
@@ -178,13 +227,11 @@ export const Supabase = (() => {
      * FormData object is passed as the body.
      */
     async callFunctionMultipart(name, formData) {
-      const { data: { session } } = await client.auth.getSession();
-      const authHeader = session?.access_token
-        ? { 'Authorization': `Bearer ${session.access_token}` }
-        : {};
+      const tokenResult = await this._getAccessTokenForRequest();
+      if (!tokenResult.ok) return { ok: false, json: { error: tokenResult.message } };
       const res = await fetch(`${URL}/functions/v1/${name}`, {
         method: 'POST',
-        headers: { apikey: KEY, ...authHeader }, // no Content-Type — browser sets multipart boundary
+        headers: { apikey: KEY, Authorization: `Bearer ${tokenResult.token}` }, // no Content-Type — browser sets multipart boundary
         body: formData
       });
       let json = {};
