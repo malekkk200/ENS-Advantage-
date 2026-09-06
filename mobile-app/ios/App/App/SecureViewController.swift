@@ -27,6 +27,17 @@ class SecureViewController: CAPBridgeViewController {
 
   private var blackoutView: UIView?
 
+  override func capacitorDidLoad() {
+    // Registers the local DeviceIntegrity plugin (see
+    // DeviceIntegrityPlugin.swift) — a plugin bundled directly in the
+    // app target like this one isn't auto-discovered the way an
+    // npm-installed plugin's podspec is, so it needs an explicit
+    // registerPluginInstance() call. capacitorDidLoad() is Capacitor's
+    // documented hook for exactly this, called once the bridge is
+    // ready but before the WebView starts loading the app.
+    bridge?.registerPluginInstance(DeviceIntegrityPlugin())
+  }
+
   override func viewDidLoad() {
     super.viewDidLoad()
 

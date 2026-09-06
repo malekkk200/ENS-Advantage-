@@ -23,6 +23,11 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
   @Override
   protected void onCreate(Bundle savedInstanceState) {
+    // Registered before super.onCreate() — this is when Capacitor
+    // reads the plugin list to wire up window.Capacitor.Plugins.* for
+    // the WebView about to load. See DeviceIntegrityPlugin.java.
+    registerPlugin(DeviceIntegrityPlugin.class);
+
     getWindow().setFlags(
       WindowManager.LayoutParams.FLAG_SECURE,
       WindowManager.LayoutParams.FLAG_SECURE

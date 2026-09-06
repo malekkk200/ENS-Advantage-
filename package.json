@@ -4,6 +4,11 @@
   "private": true,
   "description": "ENS Advantage — academic platform for ENS English Department students",
   "scripts": {
-    "inject-env": "node scripts/inject-env.js"
+    "inject-env": "node scripts/inject-env.js",
+    "compute-sri": "node scripts/compute-sri.js",
+    "build:obfuscated": "node scripts/build-obfuscated.js"
+  },
+  "devDependencies": {
+    "javascript-obfuscator": "^5.6.0"
   }
 }

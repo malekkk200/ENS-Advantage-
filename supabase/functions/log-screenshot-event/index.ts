@@ -71,12 +71,20 @@ async function logSecurityEvent(
 // iOS); this builds a record. If a specific student's account keeps
 // showing up here, that's the actionable signal for a manual account
 // review/termination under your ToS — the actual enforcement lever.
+//
+// 'device_integrity_flagged' (added alongside deviceIntegrity.js) is
+// reported the same way, purely for the same manual-review signal —
+// nothing server-side currently automates on it (e.g. no automatic
+// suspension). The function keeps its original name even though it
+// now logs more than screenshots; renaming it would mean touching
+// every existing caller and the deployed function slug for a purely
+// cosmetic fix, which isn't worth the risk here.
 // ─────────────────────────────────────────────────────────────
 const SUPABASE_URL     = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const ANON_KEY         = Deno.env.get('SUPABASE_ANON_KEY')!;
 
-const ALLOWED_EVENTS = ['screenshot_taken', 'screen_recording_started', 'screen_recording_stopped'];
+const ALLOWED_EVENTS = ['screenshot_taken', 'screen_recording_started', 'screen_recording_stopped', 'device_integrity_flagged'];
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders(req) });

@@ -20,13 +20,14 @@ import { lockBodyScroll, unlockBodyScroll } from './dom.js';
 import { BackNav } from './backNav.js';
 import { MaterialCache } from './materialCache.js';
 import { PDFExtras } from './pdfExtras.js';
+import { LicenseManager } from './licenseManager.js';
 
 // Initialise the PDF.js worker source immediately — this avoids a
 // small delay on first open because the worker script starts loading
 // in the background as soon as the module is parsed.
 if (window.pdfjsLib) {
   window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -472,29 +473,37 @@ export const PDFViewer = (() => {
         const cachedBytes = await MaterialCache.read(_materialId);
         if (myToken !== _openToken) return; // superseded while awaiting
 
-        if (cachedBytes) {
+        // Gated on the offline license (see licenseManager.js), not just
+        // on the bytes being present: a lapsed, unrenewed license means
+        // this cached copy is treated as unusable offline even though
+        // it's still sitting there encrypted, until the device is back
+        // online long enough for a renewal (or a fresh network open) to
+        // confirm access again. This is the actual TTL enforcement point.
+        if (cachedBytes && LicenseManager.isValid(_materialId)) {
           // Tell the server this material was viewed again — this is
           // still awaited-in-the-background (not blocking render, but
           // its result IS inspected) rather than pure fire-and-forget,
-          // because for 'fullLesson' this doubles as the revocation
-          // check described in materialCache.js's header: if the
-          // server now says access is denied (403) — subscription
-          // lapsed since this was cached — the local copy is purged so
-          // it can't keep being opened offline indefinitely. Any other
-          // outcome (success, or simply being offline right now)
-          // leaves the cached copy alone; being offline is the whole
-          // point of this cache, not a reason to distrust it.
+          // because for 'fullLesson' this doubles as BOTH the
+          // revocation check described in materialCache.js's header
+          // AND the license-renewal signal described in
+          // licenseManager.js: a clean success extends the license's
+          // TTL, a real 403 revokes it (and the cached bytes) outright.
+          // Any other outcome (simply being offline right now, or some
+          // transient failure) leaves both the cache and the existing
+          // license alone — being offline is the whole point of this
+          // cache, not a reason to distrust it.
           sb.functions.invoke('get-material-url', {
             body: { storage_path: material.storagePath, material_id: material.id, title: material.title },
           }).then(({ error }) => {
             const status = error?.context?.status ?? error?.status;
-            if (status === 403) MaterialCache.evict(_materialId);
-          }).catch(() => {}); // offline, or anything else — leave the cached copy alone
+            if (status === 403) LicenseManager.revoke(_materialId);
+            else if (!error) LicenseManager.issue(_materialId, material.storagePath, material.title);
+          }).catch(() => {}); // offline, or anything else — leave the cached copy + license alone
 
           try {
             const loadingTask = window.pdfjsLib.getDocument({
               data:       cachedBytes,
-              cMapUrl:    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+              cMapUrl:    'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',
               cMapPacked: true,
             });
             await _finishLoadingDoc(loadingTask, myToken);
@@ -574,7 +583,7 @@ export const PDFViewer = (() => {
         // Point the worker at the same CDN version as the main script
         if (window.pdfjsLib) {
           window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-            'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+            'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
         }
 
         // Fetch the bytes ONCE, rather than letting PDF.js stream from
@@ -609,7 +618,7 @@ export const PDFViewer = (() => {
         const loadingTask = window.pdfjsLib.getDocument({
           data:       arrayBuffer,
           // Standard CMap support for non-Latin character sets
-          cMapUrl:    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+          cMapUrl:    'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',
           cMapPacked: true,
           // Disable the text layer (nothing selectable) and annotation layer
           // (no internal hyperlinks rendered that could hint at structure)
@@ -627,6 +636,9 @@ export const PDFViewer = (() => {
         // that safe for paid content too.
         if (cacheable) {
           await MaterialCache.write(_materialId, arrayBuffer);
+          // A successful network open IS a fresh access confirmation —
+          // issues a brand-new (or renewed) 36h offline license.
+          LicenseManager.issue(_materialId, material.storagePath, material.title);
         }
 
       } catch (err) {

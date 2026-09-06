@@ -32,6 +32,7 @@
      appDownloadGate.js    — website-only "download the app" modal for Full Lesson taps
      materialCache.js      — encrypted on-device byte cache for free + paid lesson PDFs
      pdfExtras.js           — PDF viewer TOC / search / pan / dictionary / dark-sepia
+     licenseManager.js      — offline license TTL tracking + background renewal
      listeners.js          — document-level keydown/mousedown handlers
 ═══════════════════════════════════════════════════════════════ */
 import { $ } from './dom.js';
@@ -42,6 +43,7 @@ import { Modules } from './modules.js';
 import { Content } from './content.js';
 import { PDFViewer } from './pdfViewer.js';
 import { PDFExtras } from './pdfExtras.js';
+import { LicenseManager } from './licenseManager.js';
 import { AdminPanel } from './adminPanel.js';
 import { Protection } from './protection.js';
 import { Subscription } from './subscription.js';
@@ -84,6 +86,12 @@ BackNav.init();
 // markup from first paint, so this is safe to do at boot rather than
 // on every PDFViewer.open().
 PDFExtras.initGlobalListeners();
+
+// Silently renews any offline license nearing expiry whenever the
+// device is online — see licenseManager.js. Safe to start even
+// before the user is signed in; it no-ops until State.currentUser
+// is set.
+LicenseManager.startBackgroundRenewal();
 
 Auth.loadState();
 

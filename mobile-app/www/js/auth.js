@@ -15,6 +15,7 @@ import { Subscription } from './subscription.js';
 import { AdminPanel } from './adminPanel.js';
 import { MemeAdmin } from './memeAdmin.js';
 import { MaterialCache } from './materialCache.js';
+import { LicenseManager } from './licenseManager.js';
 import { Modules } from './modules.js';
 import { render } from './router.js';
 
@@ -470,6 +471,7 @@ export const Auth = {
     // logout()'s own next line race ahead of it, which is exactly the
     // ordering bug this whole block was just rewritten to fix.
     await MaterialCache.clear();
+    LicenseManager.clear();
 
     State.currentUser         = null;
     State.currentProfile      = null;

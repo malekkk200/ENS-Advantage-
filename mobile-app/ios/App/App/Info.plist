@@ -22,6 +22,15 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<!-- Lets DeviceIntegrityPlugin's jailbreak check ask whether the
+		     cydia:// scheme is openable — without this entry,
+		     canOpenURL() always returns false regardless of whether
+		     Cydia is actually installed, silently disabling that one
+		     signal rather than just being conservative about it. -->
+		<string>cydia</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

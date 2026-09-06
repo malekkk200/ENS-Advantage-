@@ -18,6 +18,27 @@
 ═══════════════════════════════════════════════════════════════ -->
 <html lang="en">
 <head>
+  <!-- ═══════════════════════════════════════════════════════════
+       CONTENT SECURITY POLICY (WebView)
+       ───────────────────────────────────────────────────────────
+       The website's equivalent policy is set via an HTTP response
+       header in vercel.json — this app has no server response to
+       attach a header to (Capacitor loads these files straight off
+       disk, per the note above), so a meta tag is the only place
+       this can go. worker-src and script-src must include
+       cdn.jsdelivr.net for the exact same reason as on the website:
+       pdf.js's worker script and all third-party UMD libraries below
+       are loaded from there, pinned by version + Subresource
+       Integrity hash (see the comment further down this file).
+  ═══════════════════════════════════════════════════════════ -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://sjzgjtpkyvrwgdeakoah.supabase.co; media-src 'self' blob: https://sjzgjtpkyvrwgdeakoah.supabase.co; connect-src 'self' https://sjzgjtpkyvrwgdeakoah.supabase.co wss://sjzgjtpkyvrwgdeakoah.supabase.co https://api.dictionaryapi.dev; worker-src 'self' blob: https://cdn.jsdelivr.net; object-src 'none'; base-uri 'self'; form-action 'self';">
+  <!-- Note: frame-ancestors and upgrade-insecure-requests are omitted
+       here — both are no-ops when a CSP is delivered via <meta>
+       rather than an HTTP response header per spec, so including them
+       would just be misleading rather than harmless. Not a gap in
+       practice: a locally-bundled app has no framing surface for
+       frame-ancestors to protect, and no plain-HTTP resources for
+       upgrade-insecure-requests to upgrade. -->
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 
@@ -262,15 +283,47 @@
        window.pdfjsLib) are guaranteed to exist by the time js/main.js
        runs (module scripts are always deferred until after the
        document has been parsed).
+
+       Every URL below is pinned to an EXACT version (never a floating
+       tag like "@2") and carries a Subresource Integrity hash: the
+       browser refuses to execute the file at all if a single byte
+       differs from what's hashed here. This is what actually closes
+       off a CDN-compromise / MITM attack vector that a plain <script
+       src> — even one loaded strictly over HTTPS — does not: HTTPS
+       only proves the bytes weren't tampered with in transit, not
+       that jsdelivr's own servers (or a DNS/BGP-level MITM presenting
+       a jsdelivr-like certificate) are serving the file this app was
+       actually built and tested against. It does nothing at all
+       against tampering with THIS app's own first-party JS after
+       deploy, or against a compromised device — see deviceIntegrity.js
+       and materialCache.js for the layers aimed at that instead.
+
+       All four hashes were computed directly from the real npm
+       package tarballs (registry.npmjs.org), not hand-typed — pdf.js
+       is loaded from jsdelivr's npm mirror rather than cdnjs for
+       exactly this reason: jsdelivr's /npm/ endpoint is guaranteed to
+       serve a package's published tarball contents byte-for-byte, so
+       a hash computed from the npm tarball is guaranteed valid for
+       the matching jsdelivr URL. Bumping any version here means
+       recomputing its hash the same way — an old hash against new
+       bytes doesn't "mostly still work," it just stops loading.
   ═══════════════════════════════════════════════════════════ -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.115.0/dist/umd/supabase.js"
+          integrity="sha384-CLZeq1dk8+Uzrs7TVvBUdlFoV5F0DMqgRoeHa8g5wJcuPe5SkVfEvdxB0ZuzlnBQ"
+          crossorigin="anonymous"></script>
   <!-- DOMPurify: sanitizes any HTML from the database before injecting into the DOM -->
-  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"
+          integrity="sha384-+VfUPEb0PdtChMwmBcBmykRMDd+v6D/oFmB3rZM/puCMDYcIvF968OimRh4KQY9a"
+          crossorigin="anonymous"></script>
   <!-- PDF.js: canvas-based PDF renderer — prevents raw binary extraction via DOM inspection -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"
+          integrity="sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e"
+          crossorigin="anonymous"></script>
   <!-- pdf-lib: used only by the admin panel, to rebuild a compressed PDF before upload
        (window.PDFLib) — see js/pdfCompressor.js -->
-  <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"
+          integrity="sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI"
+          crossorigin="anonymous"></script>
 </head>
 <body>
 

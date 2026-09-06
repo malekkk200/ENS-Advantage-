@@ -12,6 +12,10 @@ Thumbs.db
 node_modules/
 npm-debug.log*
 
+# Opt-in obfuscated build output (scripts/build-obfuscated.js) —
+# generated locally/in CI, never committed.
+dist/
+
 # Local env files (see .env.example — not required for this project,
 # only relevant if you use the optional scripts/inject-env.js workflow)
 .env

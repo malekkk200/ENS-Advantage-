@@ -16,6 +16,7 @@ import { AdminPanel } from './adminPanel.js';
 import { MemeAdmin } from './memeAdmin.js';
 import { AppDownloadGate } from './appDownloadGate.js';
 import { MaterialCache } from './materialCache.js';
+import { LicenseManager } from './licenseManager.js';
 import { render } from './router.js';
 
 /* ─────────────────────────────────────────────────────────────
@@ -375,6 +376,7 @@ export const Auth = {
     // only — see materialCache.js) so a shared/public device doesn't
     // keep serving a previous student's cached files after sign-out.
     MaterialCache.clear();
+    LicenseManager.clear();
     $('admin-dropdown-btn')?.classList.add('hidden');
     Protection.deactivate();
     render();
