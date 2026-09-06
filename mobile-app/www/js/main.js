@@ -22,6 +22,8 @@
      modules.js          — semester tabs + module list rendering/expansion
      content.js          — lesson/guide viewer (HTML fallback path)
      pdfViewer.js         — secure canvas-based PDF renderer (primary path)
+     pdfExtras.js          — PDF viewer TOC / search / pan / dictionary / dark-sepia
+     exitGuard.js           — double back-press to exit, on the Home/Main screen
      protection.js        — anti-copy / anti-screenshot measures
      subscription.js      — the "Get Premium" modal + request submission
      community.js         — help popover + Telegram community card
@@ -38,6 +40,8 @@ import { UI } from './ui.js';
 import { Modules } from './modules.js';
 import { Content } from './content.js';
 import { PDFViewer } from './pdfViewer.js';
+import { PDFExtras } from './pdfExtras.js';
+import { ExitGuard } from './exitGuard.js';
 import { AdminPanel } from './adminPanel.js';
 import { Protection } from './protection.js';
 import { Subscription } from './subscription.js';
@@ -56,7 +60,7 @@ import './nativeBridge.js';
    PUBLIC SURFACE — the only thing this module puts on `window`.
    Inline onclick="App.X.y()" handlers in the HTML call into this.
 ───────────────────────────────────────────────────────────── */
-window.App = { Auth, UI, Modules, Content, PDFViewer, AdminPanel, Protection, Subscription, Community, Calc, State, MemeAdmin };
+window.App = { Auth, UI, Modules, Content, PDFViewer, PDFExtras, AdminPanel, Protection, Subscription, Community, Calc, State, MemeAdmin };
 
 /* ─────────────────────────────────────────────────────────────
    BOOT
@@ -73,6 +77,16 @@ window.App = { Auth, UI, Modules, Content, PDFViewer, AdminPanel, Protection, Su
 // Must be initialized before any overlay can possibly open, so the
 // very first back-gesture is already handled correctly.
 BackNav.init();
+
+// Wires the PDF viewer's pan-tool / tap-to-define listeners once, up
+// front — the canvas zone element exists (hidden) in the static
+// markup from first paint, so this is safe to do at boot rather than
+// on every PDFViewer.open().
+PDFExtras.initGlobalListeners();
+
+// Double back-press to exit — no-ops entirely outside the native
+// Android/iOS app (see exitGuard.js).
+ExitGuard.init();
 
 Auth.loadState();
 

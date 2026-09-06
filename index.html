@@ -912,7 +912,32 @@
                 onclick="App.PDFViewer.zoom(+1)" title="Zoom in">+</button>
       </div>
 
+      <!-- Reading tools: table of contents, search, pan/hand tool, dark/sepia theme -->
+      <div class="pdf-tools-group">
+        <button class="pdf-nav-btn" id="pdf-btn-toc"
+                onclick="App.PDFExtras.toggleToc()" title="Table of contents">📑</button>
+        <button class="pdf-nav-btn" id="pdf-btn-search"
+                onclick="App.PDFExtras.toggleSearch()" title="Search in document">🔍</button>
+        <button class="pdf-nav-btn" id="pdf-btn-pan"
+                onclick="App.PDFExtras.togglePan()" title="Pan / hand tool">✋</button>
+        <button class="pdf-nav-btn" id="pdf-btn-theme"
+                onclick="App.PDFExtras.cycleTheme()" title="Reading theme (normal / dark / sepia)">☀️</button>
+      </div>
+
       <button class="pdf-close-btn" onclick="App.PDFViewer.close()" title="Close viewer">✕</button>
+    </div>
+
+    <!-- ── In-document search bar (hidden until the search tool is toggled) ── -->
+    <div class="pdf-search-bar hidden" id="pdf-search-bar">
+      <input type="text" id="pdf-search-input" class="pdf-search-input"
+             placeholder="Search in this document…" autocomplete="off"
+             oninput="App.PDFExtras.onSearchInput(this.value)"
+             onkeydown="if(event.key==='Enter'){ event.shiftKey ? App.PDFExtras.searchPrev() : App.PDFExtras.searchNext(); }
+                        if(event.key==='Escape'){ App.PDFExtras.toggleSearch(); }" />
+      <span class="pdf-search-count" id="pdf-search-count"></span>
+      <button class="pdf-nav-btn" onclick="App.PDFExtras.searchPrev()" title="Previous match">&#9650;</button>
+      <button class="pdf-nav-btn" onclick="App.PDFExtras.searchNext()" title="Next match">&#9660;</button>
+      <button class="pdf-nav-btn" onclick="App.PDFExtras.toggleSearch()" title="Close search">✕</button>
     </div>
 
     <!-- ── Scrollable canvas zone ─────────────────────────── -->
@@ -936,6 +961,18 @@
            dynamically with one wrapper+canvas per page for
            continuous vertical scroll. See PDFViewer._buildPages(). -->
       <div class="pdf-pages-container hidden" id="pdf-pages-container" oncontextmenu="return false;"></div>
+
+      <!-- Table-of-contents sidebar (parsed from the PDF's own outline/bookmarks) -->
+      <div class="pdf-toc-panel hidden" id="pdf-toc-panel">
+        <div class="pdf-toc-header">
+          <span>Contents</span>
+          <button class="pdf-nav-btn" onclick="App.PDFExtras.toggleToc()" title="Close">✕</button>
+        </div>
+        <div class="pdf-toc-body" id="pdf-toc-body"></div>
+      </div>
+
+      <!-- Tap-to-define dictionary popup -->
+      <div class="pdf-dict-popup hidden" id="pdf-dict-popup" oncontextmenu="return false;"></div>
 
     </div><!-- /pdf-canvas-zone -->
 

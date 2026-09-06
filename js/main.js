@@ -30,7 +30,8 @@
      memeSystem.js         — GPA-bracket meme player (session-only, zero student data)
      memeAdmin.js          — admin interface for meme catalog management
      appDownloadGate.js    — website-only "download the app" modal for Full Lesson taps
-     materialCache.js      — on-device byte cache for free ('summary') PDFs
+     materialCache.js      — encrypted on-device byte cache for free + paid lesson PDFs
+     pdfExtras.js           — PDF viewer TOC / search / pan / dictionary / dark-sepia
      listeners.js          — document-level keydown/mousedown handlers
 ═══════════════════════════════════════════════════════════════ */
 import { $ } from './dom.js';
@@ -40,6 +41,7 @@ import { UI } from './ui.js';
 import { Modules } from './modules.js';
 import { Content } from './content.js';
 import { PDFViewer } from './pdfViewer.js';
+import { PDFExtras } from './pdfExtras.js';
 import { AdminPanel } from './adminPanel.js';
 import { Protection } from './protection.js';
 import { Subscription } from './subscription.js';
@@ -59,7 +61,7 @@ import './nativeBridge.js';
    PUBLIC SURFACE — the only thing this module puts on `window`.
    Inline onclick="App.X.y()" handlers in the HTML call into this.
 ───────────────────────────────────────────────────────────── */
-window.App = { Auth, UI, Modules, Content, PDFViewer, AdminPanel, Protection, Subscription, Community, Calc, State, MemeAdmin, AppDownloadGate };
+window.App = { Auth, UI, Modules, Content, PDFViewer, PDFExtras, AdminPanel, Protection, Subscription, Community, Calc, State, MemeAdmin, AppDownloadGate };
 
 /* ─────────────────────────────────────────────────────────────
    BOOT
@@ -76,6 +78,12 @@ window.App = { Auth, UI, Modules, Content, PDFViewer, AdminPanel, Protection, Su
 // Must be initialized before any overlay can possibly open, so the
 // very first back-gesture is already handled correctly.
 BackNav.init();
+
+// Wires the PDF viewer's pan-tool / tap-to-define listeners once,
+// up front — the canvas zone element exists (hidden) in the static
+// markup from first paint, so this is safe to do at boot rather than
+// on every PDFViewer.open().
+PDFExtras.initGlobalListeners();
 
 Auth.loadState();
 

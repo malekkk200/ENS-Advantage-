@@ -19,6 +19,7 @@ import { State } from './state.js';
 import { lockBodyScroll, unlockBodyScroll } from './dom.js';
 import { BackNav } from './backNav.js';
 import { MaterialCache } from './materialCache.js';
+import { PDFExtras } from './pdfExtras.js';
 
 // Initialise the PDF.js worker source immediately — this avoids a
 // small delay on first open because the worker script starts loading
@@ -334,6 +335,10 @@ export const PDFViewer = (() => {
         await _renderPageEntry(entry);
       }
     }
+
+    // Word-hit-layer positions (tap-to-define, search highlights) were
+    // computed at the old scale — rebuild them at the new one.
+    PDFExtras.onZoomChanged();
   }
 
   /**
@@ -364,6 +369,15 @@ export const PDFViewer = (() => {
     // Resume from wherever the user last left off in this document
     const startPage = _loadSavedPage(_materialId, _totalPages);
     _scrollToPage(startPage);
+
+    // Hand the freshly-built document/pages over to the TOC/search/
+    // dictionary/theme module — see pdfExtras.js.
+    PDFExtras.onDocumentReady({
+      pdfDoc: _pdfDoc,
+      pages: _pages,
+      gotoPage: _scrollToPage,
+      getScale: () => _baseScale * _zoomLevel,
+    });
   }
 
   /** Event: blur the pages container when window loses focus */
@@ -641,6 +655,7 @@ export const PDFViewer = (() => {
       _el('pdf-overlay').classList.add('hidden');
       unlockBodyScroll();
       State.pdfViewerActive = false;
+      PDFExtras.onClose();
 
       // Destroy the PDF document to release memory
       if (_pdfDoc) {

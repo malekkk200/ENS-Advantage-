@@ -68,5 +68,10 @@ export const BackNav = {
     if (this._stack.length === 0) return;
     this._pendingBacks++;
     history.back();
+  },
+
+  /** True while any overlay is open (i.e. we're not on the bare Home/Main screen). */
+  hasOpenOverlay() {
+    return this._stack.length > 0;
   }
 };

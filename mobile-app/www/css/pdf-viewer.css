@@ -233,3 +233,126 @@
     }
   }
 
+
+/* ═══════════════════════════════════════════════════════════════
+   PDF VIEWER EXTRAS — TOC, search, pan tool, dark/sepia, dictionary
+   Same visual language as the toolbar above: navy gradient, thin
+   translucent-white borders, gold focus accent.
+═══════════════════════════════════════════════════════════════ */
+
+.pdf-tools-group { display: flex; align-items: center; gap: .4rem; flex-shrink: 0; }
+.pdf-nav-btn.active {
+  background: rgba(245,158,11,.18);
+  border-color: rgba(245,158,11,.5);
+}
+
+/* ── Search bar ── */
+.pdf-search-bar {
+  background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 100%);
+  border-bottom: 1px solid rgba(255,255,255,.07);
+  padding: .5rem calc(1.25rem + env(safe-area-inset-right, 0px)) .5rem calc(1.25rem + env(safe-area-inset-left, 0px));
+  display: flex; align-items: center; gap: .5rem;
+  flex-shrink: 0;
+}
+.pdf-search-input {
+  flex: 1; min-width: 0;
+  background: rgba(255,255,255,.07);
+  border: 1px solid rgba(255,255,255,.14);
+  color: white; border-radius: var(--radius-sm);
+  font-size: .85rem; font-family: 'Inter', sans-serif;
+  padding: .45rem .7rem;
+}
+.pdf-search-input:focus { outline: none; border-color: var(--gold); background: rgba(255,255,255,.12); }
+.pdf-search-input::placeholder { color: #64748b; }
+.pdf-search-count {
+  font-size: .75rem; color: #94a3b8; font-weight: 600;
+  white-space: nowrap; min-width: 64px; text-align: center;
+}
+
+/* ── Table of contents sidebar ── */
+.pdf-toc-panel {
+  position: absolute; top: 0; left: 0; bottom: 0;
+  width: min(300px, 82vw);
+  background: #0d1a30;
+  border-right: 1px solid rgba(255,255,255,.08);
+  box-shadow: 12px 0 32px rgba(0,0,0,.45);
+  display: flex; flex-direction: column;
+  z-index: 20;
+  animation: pdfTocSlideIn .18s ease-out;
+}
+@keyframes pdfTocSlideIn { from { transform: translateX(-12px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+.pdf-toc-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: .9rem 1rem; font-size: .85rem; font-weight: 700; color: white;
+  border-bottom: 1px solid rgba(255,255,255,.07); flex-shrink: 0;
+}
+.pdf-toc-body { flex: 1; overflow-y: auto; padding: .5rem 0; }
+.pdf-toc-body::-webkit-scrollbar { width: 5px; }
+.pdf-toc-body::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
+.pdf-toc-empty { padding: 1.5rem 1rem; color: #64748b; font-size: .82rem; line-height: 1.6; text-align: center; }
+.pdf-toc-row { display: flex; align-items: center; gap: .3rem; padding-right: .5rem; }
+.pdf-toc-label {
+  flex: 1; text-align: left; background: none; border: none; cursor: pointer;
+  color: #cbd5e1; font-size: .82rem; font-family: 'Inter', sans-serif;
+  padding: .5rem .5rem; border-radius: var(--radius-sm);
+  white-space: normal; line-height: 1.35;
+}
+.pdf-toc-label:hover { background: rgba(255,255,255,.06); color: white; }
+.pdf-toc-toggle {
+  background: none; border: none; color: #64748b; cursor: pointer;
+  font-size: .7rem; width: 20px; height: 20px; flex-shrink: 0;
+}
+.pdf-toc-level.collapsed { display: none; }
+
+/* ── Pan / hand tool ── */
+.pdf-canvas-zone.pan-mode { cursor: grab; overflow-x: auto; touch-action: none; }
+.pdf-canvas-zone.pan-mode.panning { cursor: grabbing; }
+
+/* Allow horizontal scroll generally (needed once zoomed past fit-width);
+   a no-op visually at the default fit-width scale since there's nothing
+   to overflow, but required for the pan tool / zoom-in to work at all. */
+.pdf-canvas-zone { overflow-x: auto; }
+
+/* ── Word hit-layer (tap-to-define + search highlighting) ──
+   Invisible by default: it exists purely for hit-testing and for the
+   search-highlight background below, never for visible/selectable text
+   or copy/paste — see pdfExtras.js header for why. */
+.pdf-word-layer { position: absolute; inset: 0; z-index: 2; }
+.pdf-word-run {
+  position: absolute; color: transparent;
+  -webkit-user-select: none; user-select: none;
+  cursor: pointer;
+}
+.pdf-word-match { background: rgba(245,158,11,.32); border-radius: 2px; }
+.pdf-word-match-current { background: rgba(245,158,11,.6); border-radius: 2px; }
+
+/* ── Dictionary popup ── */
+.pdf-dict-popup {
+  position: absolute; z-index: 30; width: 260px; max-width: 82vw;
+  background: #10203f; border: 1px solid rgba(245,158,11,.35);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 36px rgba(0,0,0,.55);
+  padding: .85rem 1rem;
+  -webkit-user-select: text; user-select: text; /* the definition itself is fine to select/copy */
+}
+.pdf-dict-word { font-size: .95rem; font-weight: 700; color: var(--gold); margin-bottom: .35rem; text-transform: capitalize; }
+.pdf-dict-phonetic { font-size: .78rem; color: #64748b; font-weight: 500; }
+.pdf-dict-loading, .pdf-dict-empty { font-size: .82rem; color: #94a3b8; }
+.pdf-dict-meaning { margin-top: .4rem; font-size: .82rem; line-height: 1.5; color: #cbd5e1; }
+.pdf-dict-pos { display: inline-block; font-size: .68rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .04em; color: #64748b; margin-right: .35rem; }
+
+/* ── Dark / Sepia reading themes — applied to the rendered page canvases only,
+   never the app chrome (toolbar/sidebar), which is already dark. ── */
+.pdf-pages-container.pdf-theme-dark .pdf-page-canvas {
+  filter: invert(0.92) hue-rotate(180deg) brightness(0.95) contrast(0.92);
+}
+.pdf-pages-container.pdf-theme-sepia .pdf-page-canvas {
+  filter: sepia(0.55) brightness(0.93) contrast(0.95) saturate(1.05);
+}
+
+@media (max-width: 640px) {
+  .pdf-tools-group { gap: .3rem; }
+  .pdf-search-count { min-width: 52px; font-size: .7rem; }
+  .pdf-toc-panel { width: 86vw; }
+}

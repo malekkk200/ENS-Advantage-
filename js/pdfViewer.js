@@ -19,6 +19,7 @@ import { State } from './state.js';
 import { lockBodyScroll, unlockBodyScroll } from './dom.js';
 import { BackNav } from './backNav.js';
 import { MaterialCache } from './materialCache.js';
+import { PDFExtras } from './pdfExtras.js';
 
 // Initialise the PDF.js worker source immediately — this avoids a
 // small delay on first open because the worker script starts loading
@@ -33,22 +34,23 @@ if (window.pdfjsLib) {
    ─────────────────────────────────────────────────────────────
    Architecture:
      1. open() → immediately shows skeleton + the overlay
-     2. For free ('summary') content already opened once on this
-        device, the document's bytes are read straight from
-        MaterialCache (Cache Storage) — no network, no Edge Function
-        round trip, effectively instant. See materialCache.js for
-        why this is scoped to summaries only.
+     2. For content already opened once on this device (see
+        materialCache.js — this now covers both free summaries and
+        paid full lessons), the document's bytes are read straight
+        from an AES-256-GCM encrypted on-device cache — no network,
+        no Edge Function round trip, works fully offline.
      3. Otherwise: calls the get-material-url Edge Function, which
         creates a 90-second-TTL signed URL as the requesting user
         (so storage RLS is still the real gate — a denied user gets
         an error, never a URL) and logs every attempt to
         security_logs, soft-throttling abnormal request bursts from
         one account before they reach storage.
-     4. The signed URL (or the cached bytes) is handed to PDF.js
-        getDocument(). PDF.js streams/parses the file; the raw bytes
-        never appear in the DOM as a blob or data-URI — they live
-        only in PDF.js' own internal buffer (or, for a cache hit, an
-        ArrayBuffer already local to this tab).
+     4. The signed URL (or the decrypted cached bytes) is handed to
+        PDF.js getDocument(). PDF.js streams/parses the file; the raw
+        bytes never appear in the DOM as a blob or data-URI — they
+        live only in PDF.js' own internal buffer (or, for a cache
+        hit, a function-local ArrayBuffer that's never assigned
+        anywhere it would outlive this call).
      5. _buildPages() → creates one wrapper+canvas per page, sized
         from that page's real aspect ratio, and wires an
         IntersectionObserver that renders each page's canvas only
@@ -333,6 +335,10 @@ export const PDFViewer = (() => {
         await _renderPageEntry(entry);
       }
     }
+
+    // Word-hit-layer positions (tap-to-define, search highlights) were
+    // computed at the old scale — rebuild them at the new one.
+    PDFExtras.onZoomChanged();
   }
 
   /**
@@ -363,6 +369,15 @@ export const PDFViewer = (() => {
     // Resume from wherever the user last left off in this document
     const startPage = _loadSavedPage(_materialId, _totalPages);
     _scrollToPage(startPage);
+
+    // Hand the freshly-built document/pages over to the TOC/search/
+    // dictionary/theme module — see pdfExtras.js.
+    PDFExtras.onDocumentReady({
+      pdfDoc: _pdfDoc,
+      pages: _pages,
+      gotoPage: _scrollToPage,
+      getScale: () => _baseScale * _zoomLevel,
+    });
   }
 
   /** Event: blur the pages container when window loses focus */
@@ -444,25 +459,37 @@ export const PDFViewer = (() => {
       _el('pdf-canvas-zone').addEventListener('scroll', _onScroll, { passive: true });
       if (!_devToolsTimer) _devToolsTimer = setInterval(_checkDevTools, 1200);
 
-      // ── 0. Instant path: already-cached free ('summary') content ──
+      // ── 0. Instant path: already-cached content (works fully offline) ──
       // Skips both the Edge Function round trip and the PDF network
-      // fetch entirely — see materialCache.js for why this is scoped
-      // to 'summary' only (never 'fullLesson', which stays fully
-      // gated by a fresh signed URL + fresh audit-log row on every
-      // single open, in both this codebase and the app's).
-      const cacheable = type === 'summary';
+      // fetch entirely, decrypting straight from the on-device cache
+      // — see materialCache.js. Now covers both 'summary' (free) and
+      // 'fullLesson' (paid) content: paid lessons are safe to persist
+      // here because they're encrypted at rest with a key that can
+      // never be read back out as bytes by any script, not because
+      // they're treated as any less sensitive than before.
+      const cacheable = type === 'summary' || type === 'fullLesson';
       if (cacheable) {
         const cachedBytes = await MaterialCache.read(_materialId);
         if (myToken !== _openToken) return; // superseded while awaiting
 
         if (cachedBytes) {
-          // Tell the server this material was viewed again, purely for
-          // the audit trail / soft-throttle counter — never awaited,
-          // since no access decision here depends on its result (we're
-          // not using any URL it might return).
+          // Tell the server this material was viewed again — this is
+          // still awaited-in-the-background (not blocking render, but
+          // its result IS inspected) rather than pure fire-and-forget,
+          // because for 'fullLesson' this doubles as the revocation
+          // check described in materialCache.js's header: if the
+          // server now says access is denied (403) — subscription
+          // lapsed since this was cached — the local copy is purged so
+          // it can't keep being opened offline indefinitely. Any other
+          // outcome (success, or simply being offline right now)
+          // leaves the cached copy alone; being offline is the whole
+          // point of this cache, not a reason to distrust it.
           sb.functions.invoke('get-material-url', {
             body: { storage_path: material.storagePath, material_id: material.id, title: material.title },
-          }).catch(() => {});
+          }).then(({ error }) => {
+            const status = error?.context?.status ?? error?.status;
+            if (status === 403) MaterialCache.evict(_materialId);
+          }).catch(() => {}); // offline, or anything else — leave the cached copy alone
 
           try {
             const loadingTask = window.pdfjsLib.getDocument({
@@ -471,7 +498,7 @@ export const PDFViewer = (() => {
               cMapPacked: true,
             });
             await _finishLoadingDoc(loadingTask, myToken);
-            return; // rendered entirely from cache — done
+            return; // rendered entirely from cache — done, fully offline-capable
           } catch (err) {
             if (myToken !== _openToken) return; // superseded — newer open() owns error reporting now
             console.warn('[PDFViewer] cached copy failed to load, evicting and falling back to network:', err);
@@ -480,7 +507,10 @@ export const PDFViewer = (() => {
             // creates a fresh one, so it isn't silently leaked.
             if (_pdfDoc) { try { await _pdfDoc.destroy(); } catch (_) {} _pdfDoc = null; }
             await MaterialCache.evict(_materialId);
-            // fall through to the normal network path below
+            // fall through to the normal network path below — if the
+            // device is genuinely offline and there's no usable cache,
+            // this will fail too, and the existing catch block further
+            // down reports that clearly rather than hanging.
           }
         }
       }
@@ -539,7 +569,7 @@ export const PDFViewer = (() => {
         return;
       }
 
-      // ── 2. Load the PDF via PDF.js ─────────────────────────
+      // ── 2. Fetch the document bytes once, then load via PDF.js ──
       try {
         // Point the worker at the same CDN version as the main script
         if (window.pdfjsLib) {
@@ -547,16 +577,40 @@ export const PDFViewer = (() => {
             'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
         }
 
+        // Fetch the bytes ONCE, rather than letting PDF.js stream from
+        // the signed URL and separately re-downloading afterward
+        // (un-awaited, in the background) to populate the cache. That
+        // was two independent network operations racing against
+        // whatever the user did next — if connectivity dropped (or the
+        // tab was closed) before that second fetch finished, the
+        // document simply never got cached even though it had just
+        // opened successfully seconds earlier, which is very likely
+        // exactly how the "Connection problem loading this document"
+        // bug happened for previously-opened lessons: the first-ever
+        // online open never actually finished writing a usable cache
+        // entry, so the next offline attempt had nothing to fall back
+        // to and surfaced a network error instead. Fetching once and
+        // using the SAME bytes for both rendering and the cache write
+        // below removes that race entirely, trading away PDF.js' own
+        // progressive "start rendering before the whole file arrives"
+        // streaming — an acceptable cost for these file sizes against
+        // a much more important guarantee, for a feature whose entire
+        // point is reliable offline access.
+        const response = await fetch(signedUrl, {
+          // Don't let the browser's own HTTP cache hold a copy keyed
+          // to a URL that's only valid for the next 90 seconds anyway.
+          headers: { 'Cache-Control': 'no-store' }
+        });
+        if (myToken !== _openToken) return; // superseded while awaiting
+        if (!response.ok) throw new Error(`Failed to download document (status ${response.status})`);
+        const arrayBuffer = await response.arrayBuffer();
+        if (myToken !== _openToken) return; // superseded while awaiting
+
         const loadingTask = window.pdfjsLib.getDocument({
-          url:          signedUrl,
-          // Prevents browser from caching the signed URL response
-          httpHeaders:  { 'Cache-Control': 'no-store' },
+          data:       arrayBuffer,
           // Standard CMap support for non-Latin character sets
-          cMapUrl:      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
-          cMapPacked:   true,
-          // Stream the file progressively — don't wait for full download
-          disableRange:  false,
-          disableStream: false,
+          cMapUrl:    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+          cMapPacked: true,
           // Disable the text layer (nothing selectable) and annotation layer
           // (no internal hyperlinks rendered that could hint at structure)
         });
@@ -564,17 +618,15 @@ export const PDFViewer = (() => {
         await _finishLoadingDoc(loadingTask, myToken);
         if (myToken !== _openToken) return; // superseded mid-build
 
-        // Background-populate the on-device cache for next time — the
-        // document is already visible by this point, so this never
-        // delays anything the user is waiting on. Re-fetches the same
-        // signed URL (still valid for 90s) to get raw bytes, since
-        // PDF.js's own streamed load doesn't expose them. Scoped to
-        // 'summary' only, same reasoning as the read side above.
+        // Populate the on-device (encrypted) cache using the exact
+        // same bytes just rendered — awaited here, not fire-and-
+        // forget, so caching genuinely completes before open()
+        // returns instead of racing against whatever happens next.
+        // Covers both 'summary' and 'fullLesson' now — see the read
+        // side above and materialCache.js for why encryption makes
+        // that safe for paid content too.
         if (cacheable) {
-          fetch(signedUrl)
-            .then(r => (r.ok ? r.arrayBuffer() : null))
-            .then(buf => { if (buf && myToken === _openToken) MaterialCache.write(_materialId, buf); })
-            .catch(() => {}); // best-effort — a failed cache write just means next open isn't instant
+          await MaterialCache.write(_materialId, arrayBuffer);
         }
 
       } catch (err) {
@@ -584,6 +636,11 @@ export const PDFViewer = (() => {
           _setError('Invalid or corrupted document. Please contact support.');
         } else if (err?.name === 'MissingPDFException' || err?.status === 403) {
           _setError('Document link expired. Please close and reopen the content.');
+        } else if (err instanceof TypeError) {
+          // fetch() throws a bare TypeError for a network-level
+          // failure (no connectivity, DNS, etc.) — distinct from a
+          // successful response with a bad status, handled above.
+          _setError('Connection problem loading this document. Please check your internet connection and try again.');
         } else {
           _setError('Failed to load document. Please try again.');
         }
@@ -600,6 +657,7 @@ export const PDFViewer = (() => {
       _el('pdf-overlay').classList.add('hidden');
       unlockBodyScroll();
       State.pdfViewerActive = false;
+      PDFExtras.onClose();
 
       // Destroy the PDF document to release memory
       if (_pdfDoc) {
