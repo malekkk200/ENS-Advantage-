@@ -42,6 +42,8 @@ const OUT  = path.join(ROOT, 'dist');
 // obfuscated instead of plain-copied (see the loop below).
 const COPY_ENTRIES = [
   'index.html', 'css', 'assets', 'manifest.json', 'sw.js',
+  'favicon.ico', 'robots.txt', 'sitemap.xml',
+  'privacy.html', 'terms.html', 'google1eba07f59f6fcdcc.html',
   'supabase' // Edge Function source — not served to the browser at all, but harmless/expected to carry along for a "the whole deployable tree" build
 ];
 
