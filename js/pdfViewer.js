@@ -720,6 +720,90 @@ export const PDFViewer = (() => {
       _zoomLevel = ZOOM_STEPS[nextIdx];
       _updateZoomLabel();
       await _rerenderAfterZoom();
+    },
+
+    /**
+     * "Download for offline" — proactively fetches, encrypts, and
+     * caches a material WITHOUT opening the viewer UI, so a lesson
+     * card can offer an explicit download action instead of the
+     * implicit "it gets cached the first time you happen to open it"
+     * behavior. Deliberately self-contained and touches NONE of the
+     * module-level state open()/close()/zoom() above use (_pdfDoc,
+     * _pages, _openToken, etc.) — it can safely run concurrently with
+     * (or with nothing to do with) whatever the viewer itself is
+     * doing, and a bug here can't corrupt an open document.
+     *
+     * The file never leaves the app unencrypted at any point — this
+     * calls the exact same MaterialCache.write() (AES-256-GCM,
+     * non-extractable device key) and LicenseManager.issue() (36h
+     * offline license) that opening the material online already
+     * triggers; this just does it on demand, ahead of time, without
+     * requiring the student to open the full document first. There is
+     * no "save to Files/Downloads" step anywhere in this path — the
+     * bytes go straight from the network response into the encrypted
+     * cache and are never written anywhere else.
+     *
+     * @param {object} mod       Module object { name, … }
+     * @param {string} type      'summary' | 'fullLesson' (not 'guide' — that's a separate text+images flow, not a cached PDF)
+     * @param {object} material  { id, title, storagePath }
+     * @param {function} [onProgress] optional callback('checking'|'fetching_url'|'downloading'|'encrypting')
+     * @returns {Promise<{ok: boolean, reason?: string, alreadyCached?: boolean}>}
+     */
+    async prefetchOffline(mod, type, material, onProgress) {
+      const materialId = material?.id;
+      if (!materialId) return { ok: false, reason: 'invalid_material' };
+      if (type !== 'summary' && type !== 'fullLesson') return { ok: false, reason: 'not_cacheable' };
+
+      onProgress?.('checking');
+      // Already have a valid, usable offline copy? Nothing to do —
+      // this also means tapping "Download" again after it's already
+      // downloaded is a safe, cheap no-op rather than a redundant
+      // re-fetch.
+      if (LicenseManager.isValid(materialId)) {
+        const existing = await MaterialCache.read(materialId);
+        if (existing) return { ok: true, alreadyCached: true };
+      }
+
+      try {
+        onProgress?.('fetching_url');
+        const { data, error } = await sb.functions.invoke('get-material-url', {
+          body: { storage_path: material.storagePath, material_id: material.id, title: material.title },
+        });
+
+        if (error || !data?.signedUrl) {
+          const status = error?.context?.status;
+          if (status === 403) return { ok: false, reason: 'access_denied' };
+          if (status === 401) return { ok: false, reason: 'session_expired' };
+          if (status === 429) return { ok: false, reason: 'rate_limited' };
+          return { ok: false, reason: status ? 'server_error' : 'network' };
+        }
+
+        onProgress?.('downloading');
+        const response = await fetch(data.signedUrl, { headers: { 'Cache-Control': 'no-store' } });
+        if (!response.ok) return { ok: false, reason: 'download_failed' };
+        const arrayBuffer = await response.arrayBuffer();
+
+        onProgress?.('encrypting');
+        await MaterialCache.write(materialId, arrayBuffer);
+        // Confirm the write actually produced a usable cache entry
+        // before reporting success — MaterialCache.write() fails
+        // closed and silently no-ops on a flagged/unavailable device
+        // (see materialCache.js) rather than throwing, so a bare
+        // "no exception was thrown" is not the same as "it worked."
+        const verify = await MaterialCache.read(materialId);
+        if (!verify) return { ok: false, reason: 'cache_write_failed' };
+
+        LicenseManager.issue(materialId, material.storagePath, material.title);
+        return { ok: true };
+      } catch (err) {
+        console.warn('[PDFViewer] prefetchOffline failed:', err);
+        return { ok: false, reason: err instanceof TypeError ? 'network' : 'exception' };
+      }
+    },
+
+    /** Synchronous check for whether a material currently has a usable offline copy — cheap, no network/decryption, safe to call for every card on render. */
+    isOfflineReady(materialId) {
+      return !!materialId && LicenseManager.isValid(materialId);
     }
   };
 })();

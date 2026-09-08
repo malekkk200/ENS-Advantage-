@@ -6,6 +6,8 @@ import { State } from './state.js';
 import { $, escHtml, initScrollReveal } from './dom.js';
 import { Content } from './content.js';
 import { Subscription } from './subscription.js';
+import { CourseMaterials } from './courseMaterials.js';
+import { PDFViewer } from './pdfViewer.js';
 
 /* ─────────────────────────────────────────────────────────────
    MODULES — semester tabs + module list
@@ -96,6 +98,14 @@ export const Modules = {
       // module names (which can contain quotes/RTL text) never have to be
       // serialized into an inline JS attribute this way.
       body.addEventListener('click', (e) => {
+        const dlBtn = e.target.closest('[data-action="download-offline"]');
+        if (dlBtn) {
+          // Never also open the viewer — this tap means "cache it for
+          // later," not "open it right now."
+          e.stopPropagation();
+          this._handleDownloadClick(dlBtn);
+          return;
+        }
         const item = e.target.closest('[data-action="open-content"]');
         if (!item) return;
         Content.open(item.dataset.mod, item.dataset.type, item.dataset.prem === 'true');
@@ -112,6 +122,32 @@ export const Modules = {
   buildModuleBody(mod, hasPrem) {
     const name = escHtml(mod.name);
 
+    /**
+     * Renders the small "download for offline" affordance next to a
+     * content-item, or '' when there's nothing to download (no PDF
+     * registered for this slot yet, or it's premium content the
+     * student can't view anyway — no point offering to cache
+     * something they're not entitled to open).
+     */
+    const downloadButton = (type, viewable) => {
+      if (!viewable) return '';
+      const materials = CourseMaterials.getAll(State.activeSemester, mod.name, type);
+      if (!materials.length) return '';
+      // A slot can (rarely) hold several materials — offer to
+      // download all of them from one button rather than making the
+      // student pick, since there's no viewer overlay to pick inside
+      // here (unlike Content.open()'s picker).
+      const ids = materials.map(m => m.id).join(',');
+      const alreadyOffline = materials.every(m => PDFViewer.isOfflineReady(m.id));
+      return `
+        <button type="button" class="download-offline-btn${alreadyOffline ? ' downloaded' : ''}"
+                data-action="download-offline" data-mod="${name}" data-type="${type}" data-ids="${escHtml(ids)}"
+                title="${alreadyOffline ? 'Available offline' : 'Download for offline access'}"
+                aria-label="${alreadyOffline ? 'Available offline' : 'Download for offline access'}">
+          <span class="download-offline-icon">${alreadyOffline ? '✓' : '⬇'}</span>
+        </button>`;
+    };
+
     const lessonsPart = !mod.isListening ? `
       <div>
         <div class="content-section-title">📚 Lessons</div>
@@ -123,7 +159,10 @@ export const Modules = {
               <div class="content-tag free-tag">✓ Free Access</div>
             </div>
           </div>
-          <span style="font-size:.8rem;color:var(--slate-400);">→</span>
+          <div style="display:flex;align-items:center;gap:.5rem;">
+            ${downloadButton('summary', true)}
+            <span style="font-size:.8rem;color:var(--slate-400);">→</span>
+          </div>
         </div>
         <div class="content-item" data-action="open-content" data-mod="${name}" data-type="fullLesson" data-prem="${hasPrem}">
           <div class="content-item-left">
@@ -133,7 +172,10 @@ export const Modules = {
               <div class="content-tag ${hasPrem ? 'unlocked-tag' : 'premium-tag'}">${hasPrem ? '✓ Unlocked' : '⚡ Premium Only'}</div>
             </div>
           </div>
-          <span style="font-size:.8rem;color:var(--slate-400);">${hasPrem ? '→' : '🔒'}</span>
+          <div style="display:flex;align-items:center;gap:.5rem;">
+            ${downloadButton('fullLesson', hasPrem)}
+            <span style="font-size:.8rem;color:var(--slate-400);">${hasPrem ? '→' : '🔒'}</span>
+          </div>
         </div>
       </div>` : '';
 
@@ -174,6 +216,59 @@ export const Modules = {
       State.expandedModuleName = name;
       const newCard = $('mod-card-' + CSS.escape(name));
       if (newCard) newCard.classList.add('expanded');
+    }
+  },
+
+  /**
+   * Handles a tap on a "download for offline" button — see
+   * buildModuleBody()'s downloadButton() for how it's rendered.
+   * Downloads every material in this slot (almost always just one)
+   * via PDFViewer.prefetchOffline(), updating the button's own icon
+   * to reflect progress/result. Never opens the viewer.
+   */
+  async _handleDownloadClick(btn) {
+    if (btn.classList.contains('downloading') || btn.classList.contains('downloaded')) return; // already in progress or done — nothing to do
+    const modName = btn.dataset.mod;
+    const type = btn.dataset.type;
+    const ids = (btn.dataset.ids || '').split(',').filter(Boolean);
+    const modules = Curriculum.modulesFor(State.activeSemester);
+    const mod = modules.find(m => m.name === modName);
+    const materials = CourseMaterials.getAll(State.activeSemester, modName, type)
+      .filter(m => ids.includes(m.id));
+    if (!mod || !materials.length) return;
+
+    const icon = btn.querySelector('.download-offline-icon');
+    btn.classList.add('downloading');
+    btn.classList.remove('downloaded');
+    if (icon) icon.textContent = '⏳';
+    btn.disabled = true;
+
+    let allOk = true;
+    let lastFailureReason = null;
+    for (const material of materials) {
+      const result = await PDFViewer.prefetchOffline(mod, type, material);
+      if (!result.ok) { allOk = false; lastFailureReason = result.reason; }
+    }
+
+    btn.classList.remove('downloading');
+    btn.disabled = false;
+
+    if (allOk) {
+      btn.classList.add('downloaded');
+      if (icon) icon.textContent = '✓';
+      btn.title = 'Available offline';
+      btn.setAttribute('aria-label', 'Available offline');
+    } else {
+      // Revert to the download icon rather than leaving it stuck on
+      // the spinner — the student can just tap again. A friendlier
+      // message for the one failure mode they can actually act on
+      // (no internet right now); anything else stays generic rather
+      // than leaking server-side detail into the UI.
+      if (icon) icon.textContent = '⬇';
+      btn.title = lastFailureReason === 'network'
+        ? 'No internet connection — try again when you\'re online'
+        : 'Download failed — tap to try again';
+      btn.setAttribute('aria-label', btn.title);
     }
   }
 };
