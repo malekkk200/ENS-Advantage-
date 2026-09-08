@@ -34,11 +34,24 @@
       strong guarantee.
 
    Either way, `check()` NEVER blocks normal use for a false positive
-   past the point of reasonable doubt — see the "signals" design: a
-   single weak signal on the JS tier is logged but not enforced,
-   only a native "rooted/jailbroken: true" or 2+ corroborating JS
-   signals actually gate offline decryption. A paying student on an
-   ordinary phone should never see this trigger.
+   past the point of reasonable doubt: only a native "rooted/jailbroken:
+   true" result actually gates offline decryption. The JS-only tier
+   below is advisory ONLY — it can observe a signal and report it, but
+   it never sets `compromised: true` by itself. That's not the original
+   design (an earlier version gated on 2+ JS signals too) — it was
+   changed after a real false-positive in production: on the actual
+   packaged app, `window.outerWidth`/`outerHeight` are legitimately 0 in
+   many mobile WebViews as completely normal behavior (not a tamper
+   signal at all — this is a well-documented WebView quirk, not
+   specific to this app), and Capacitor does not tag its WebView's
+   `navigator.userAgent` by default the way this file used to assume.
+   Both of the checks built around those two assumptions were removed
+   outright rather than "tuned" — see git history if you want the
+   specifics — because the failure mode (silently blocking a paying
+   student's offline caching, everywhere, always) is categorically
+   worse than under-detecting. A paying student on an ordinary phone
+   should never see this trigger, and now structurally cannot, from
+   this tier.
 ═══════════════════════════════════════════════════════════════ */
 
 let _cached = null; // memoized for the lifetime of this page load — device root status doesn't change mid-session
@@ -51,38 +64,25 @@ function _nativePlugin() {
   }
 }
 
-/** Weak, JS-only heuristics — see file header. Each one alone is common/benign; only counted together. */
+/**
+ * Advisory-only JS heuristics — see file header for why this tier
+ * never gates anything by itself. Currently just one signal:
+ * a `debugger;` statement that takes noticeably longer than
+ * instantaneous to execute means something is actually stepping
+ * through code (devtools paused, or a remote debugger attached).
+ * Same underlying idea as protection.js's window-size devtools
+ * check, just harder to spoof by resizing a window. Kept for
+ * possible future use (e.g. surfacing it in a support/analytics
+ * view) — never treated as a block on its own.
+ */
 function _jsHeuristics() {
   const signals = [];
-
-  // A debugger statement that returns almost instantly means nothing is
-  // attached; a multi-hundred-ms pause is the classic signal that
-  // devtools (or an attached remote debugger) is open and stepping
-  // through code. Same underlying idea as protection.js's window-size
-  // devtools check, just harder to spoof by resizing a window.
   try {
     const t0 = performance.now();
     // eslint-disable-next-line no-debugger
     debugger;
     if (performance.now() - t0 > 100) signals.push('debugger_pause');
   } catch (_) {}
-
-  // A WebView reporting itself as a desktop browser, or a "mobile" user
-  // agent with no native Capacitor bridge present, suggests the page is
-  // being loaded outside the packaged app shell it expects.
-  try {
-    if (/Capacitor/i.test(navigator.userAgent) === false && window.Capacitor) {
-      signals.push('bridge_ua_mismatch');
-    }
-  } catch (_) {}
-
-  // window.outerWidth/outerHeight are 0 in some automation/headless
-  // and repackaging toolchains that render but never open a real
-  // window chrome.
-  try {
-    if (window.outerWidth === 0 || window.outerHeight === 0) signals.push('zero_outer_dimensions');
-  } catch (_) {}
-
   return signals;
 }
 
@@ -105,12 +105,11 @@ export const DeviceIntegrity = {
       }
     }
 
+    // Advisory only — see file header. This tier NEVER sets
+    // compromised: true; it can only report what it saw. Actual
+    // blocking is reserved entirely for a genuine native finding above.
     const signals = _jsHeuristics();
-    // Deliberately conservative: a single weak JS signal is common and
-    // often benign (e.g. any developer actually testing the app) — only
-    // 2+ corroborating signals are treated as an actual gate.
-    _cached = { compromised: signals.length >= 2, signals, source: native ? 'native_unavailable' : 'js_fallback' };
-    _report(_cached);
+    _cached = { compromised: false, signals, source: native ? 'native_unavailable' : 'js_fallback' };
     return _cached;
   },
 
