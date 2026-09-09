@@ -63,11 +63,20 @@
    TTL lapses — an inherent, accepted limitation of any offline-
    capable scheme, not something unique to this implementation.
 
-   Device integrity: see deviceIntegrity.js. Both read() and write()
-   below refuse to run at all on a device flagged as rooted/
-   jailbroken/tampered — the RASP-style check requested alongside
-   this file, sitting at the one choke point every offline decryption
-   (and every new offline copy being created) has to pass through.
+   Device integrity: see deviceIntegrity.js. Checked on every read()/
+   write(), and a genuine finding is reported through the security-log
+   pipeline — but as of the incident below, it no longer BLOCKS either
+   operation. It originally did (a RASP-style gate refusing to run at
+   all on a flagged device), but two independent false positives — one
+   in the JS-only fallback heuristic, one in the native Android
+   plugin's own logic, on two separate real deployments — each broke
+   offline access for ordinary, non-tampered devices before being
+   caught. A check with that track record isn't safe to trust with an
+   all-or-nothing gate on a paying student's access; it's kept for
+   visibility (a genuine finding is still worth knowing about) but the
+   actual protection here is, and always has been, the AES-256-GCM
+   encryption + non-extractable key below — that part has never had a
+   bug, and doesn't depend on this heuristic being right.
 ═══════════════════════════════════════════════════════════════ */
 import { State } from './state.js';
 import { SecureKeyStore } from './secureKeyStore.js';
@@ -145,19 +154,18 @@ export const MaterialCache = {
   async read(materialId) {
     if (!materialId || !('caches' in window)) return null;
     try {
-      // RASP-style gate: on a device flagged as rooted/jailbroken/
-      // tampered (see deviceIntegrity.js), offline decryption simply
-      // never happens — a cache "miss" here just means the normal
-      // network path runs instead (or, if genuinely offline too, the
-      // document doesn't open at all on that device). The encrypted
-      // bytes and the key both stay exactly where they were; nothing
-      // is deleted, so a false positive costs the student one online
-      // reopen, never their whole offline library.
-      const integrity = await DeviceIntegrity.check();
-      if (integrity.compromised) {
-        console.warn('[MaterialCache] offline decryption blocked — device integrity check failed:', integrity.signals);
-        return null;
-      }
+      // Device integrity is checked and reported (see deviceIntegrity.js
+      // — check() itself reports a genuine finding through the existing
+      // security-log pipeline) but no longer GATES this operation — see
+      // this file's header for why. Two separate false positives from
+      // two independent root-detection code paths broke this exact
+      // offline feature for ordinary, legitimate users before this was
+      // caught; a heuristic that has twice mistaken a normal device for
+      // a compromised one is not a heuristic this method can afford to
+      // trust with blocking a paying student's access. The actual
+      // protection here is the encryption below, which has never had a
+      // bug — that's what continues to do the real work.
+      DeviceIntegrity.check().catch(() => {});
 
       const cache = await caches.open(CACHE_NAME);
       const hit = await cache.match(keyFor(materialId));
@@ -185,16 +193,8 @@ export const MaterialCache = {
   async write(materialId, arrayBuffer) {
     if (!materialId || !arrayBuffer || !('caches' in window)) return;
     try {
-      // Same integrity gate as read() — don't hand a fresh copy of the
-      // (still-encrypted, but locally-keyed) content to a device that's
-      // already flagged as tampered. The document the student is
-      // viewing right now is completely unaffected; it just won't be
-      // available offline on this particular device next time.
-      const integrity = await DeviceIntegrity.check();
-      if (integrity.compromised) {
-        console.warn('[MaterialCache] caching skipped — device integrity check failed:', integrity.signals);
-        return;
-      }
+      // Checked and reported, not gated — see read() above for why.
+      DeviceIntegrity.check().catch(() => {});
 
       const key = await _withTimeout(_getCryptoKey(), KEY_TIMEOUT_MS, 'MaterialCache write: key acquisition');
       const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));

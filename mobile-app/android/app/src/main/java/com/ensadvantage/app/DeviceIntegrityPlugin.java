@@ -166,8 +166,7 @@ public class DeviceIntegrityPlugin extends Plugin {
     // regardless of what happens inside the app), so it's folded into
     // the same signal set at the same conservative threshold.
     return (Build.FINGERPRINT != null && (Build.FINGERPRINT.startsWith("generic")
-              || Build.FINGERPRINT.startsWith("unknown")
-              || Build.FINGERPRINT.contains("test-keys")))
+              || Build.FINGERPRINT.startsWith("unknown")))
         || (Build.MODEL != null && (Build.MODEL.contains("google_sdk")
               || Build.MODEL.contains("Emulator")
               || Build.MODEL.contains("Android SDK built for x86")))
