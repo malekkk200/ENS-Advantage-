@@ -468,10 +468,34 @@ export const PDFViewer = (() => {
       // here because they're encrypted at rest with a key that never
       // leaves this device's secure enclave, not because they're
       // treated as any less sensitive than before.
+      //
+      // These two flags record WHY the instant path below didn't
+      // satisfy the request (if it didn't) — used further down to give
+      // an honest, actionable error instead of a generic "check your
+      // internet connection" message when the real problem is "this
+      // was never downloaded" or "its offline license lapsed," neither
+      // of which a WiFi toggle fixes.
+      let noOfflineCopyAtAll   = false;
+      let offlineLicenseLapsed = false;
+
       const cacheable = type === 'summary' || type === 'fullLesson';
       if (cacheable) {
         const cachedBytes = await MaterialCache.read(_materialId);
         if (myToken !== _openToken) return; // superseded while awaiting
+
+        if (!cachedBytes) {
+          noOfflineCopyAtAll = true;
+        } else if (!LicenseManager.hasRecord(_materialId)) {
+          // Bytes exist but no license record was ever created for this
+          // material — this is what a lesson cached before this file
+          // existed looks like (see licenseManager.js's hasRecord() doc),
+          // not a lapsed subscription. Grandfather it in with a fresh
+          // license rather than treating "predates this feature" the
+          // same as "access was actually revoked."
+          LicenseManager.issue(_materialId, material.storagePath, material.title);
+        } else if (!LicenseManager.isValid(_materialId)) {
+          offlineLicenseLapsed = true;
+        }
 
         // Gated on the offline license (see licenseManager.js), not just
         // on the bytes being present: a lapsed, unrenewed license means
@@ -516,11 +540,33 @@ export const PDFViewer = (() => {
             // creates a fresh one, so it isn't silently leaked.
             if (_pdfDoc) { try { await _pdfDoc.destroy(); } catch (_) {} _pdfDoc = null; }
             await MaterialCache.evict(_materialId);
+            noOfflineCopyAtAll = true; // the cache we had just turned out to be unusable
             // fall through to the normal network path below — if the
             // device is genuinely offline and there's no usable cache,
             // this will fail too, and the existing catch block further
             // down reports that clearly rather than hanging.
           }
+        }
+
+        // ── Confirmed-offline fast path ───────────────────────────
+        // We didn't return above, so there's no usable instant copy.
+        // If the browser is confidently reporting no connectivity at
+        // all, the network attempt below cannot succeed — skip that
+        // (slow, and here misleading) round trip entirely and explain
+        // the REAL reason offline access isn't working right now.
+        // (navigator.onLine === false is a deliberate strict check —
+        // it can occasionally lie and report `true` while genuinely
+        // offline on some WebViews, but it essentially never lies the
+        // other way, so this never blocks a request that could
+        // otherwise succeed; it only short-circuits ones that can't.)
+        if (navigator.onLine === false) {
+          if (myToken !== _openToken) return; // superseded while awaiting
+          if (noOfflineCopyAtAll) {
+            _setError("This lesson hasn't been downloaded for offline use yet. Connect to the internet, then open it once (or tap the ⬇ download button on the lesson) — after that it'll be available offline anytime.");
+          } else {
+            _setError('Your offline access to this lesson has expired. Please reconnect to the internet briefly to renew it, then try again.');
+          }
+          return;
         }
       }
 
@@ -563,8 +609,20 @@ export const PDFViewer = (() => {
             _setError('Too many requests — please slow down and try again shortly.');
           } else if (!status) {
             // No HTTP status at all means the request never got a server
-            // response (network/CORS-level failure).
-            _setError('Connection problem loading this document. Please check your internet connection and try again.');
+            // response (network/CORS-level failure) — this used to
+            // always show a generic "check your internet" message even
+            // when we'd actually just failed to find a usable offline
+            // copy (see noOfflineCopyAtAll/offlineLicenseLapsed above:
+            // a real connectivity hiccup and "this lesson was never
+            // downloaded" look identical from here unless we use what
+            // was already learned in step 0).
+            if (noOfflineCopyAtAll) {
+              _setError("This lesson hasn't been downloaded for offline use yet. Connect to the internet, then open it once (or tap the ⬇ download button on the lesson) — after that it'll be available offline anytime.");
+            } else if (offlineLicenseLapsed) {
+              _setError('Your offline access to this lesson has expired. Please reconnect to the internet briefly to renew it, then try again.');
+            } else {
+              _setError('Connection problem loading this document. Please check your internet connection and try again.');
+            }
           } else {
             _setError('Could not load this document right now. Please try again.');
           }
@@ -574,7 +632,13 @@ export const PDFViewer = (() => {
       } catch (err) {
         if (myToken !== _openToken) return; // superseded by a newer open() while awaiting
         console.error('[PDFViewer] Network error during signed URL generation:', err);
-        _setError('Network error. Please check your connection and try again.');
+        if (noOfflineCopyAtAll) {
+          _setError("This lesson hasn't been downloaded for offline use yet. Connect to the internet, then open it once (or tap the ⬇ download button on the lesson) — after that it'll be available offline anytime.");
+        } else if (offlineLicenseLapsed) {
+          _setError('Your offline access to this lesson has expired. Please reconnect to the internet briefly to renew it, then try again.');
+        } else {
+          _setError('Network error. Please check your connection and try again.');
+        }
         return;
       }
 
@@ -649,8 +713,17 @@ export const PDFViewer = (() => {
           // fetch() throws a bare TypeError for a network-level
           // failure (no connectivity, DNS, etc.) — distinct from a
           // successful response with a bad status, which is handled
-          // by the branches above and below.
-          _setError('Connection problem loading this document. Please check your internet connection and try again.');
+          // by the branches above and below. Same reasoning as the
+          // get-material-url branch above: prefer the specific,
+          // actionable reason we already know over a generic
+          // "check your internet" message when we have one.
+          if (noOfflineCopyAtAll) {
+            _setError("This lesson hasn't been downloaded for offline use yet. Connect to the internet, then open it once (or tap the ⬇ download button on the lesson) — after that it'll be available offline anytime.");
+          } else if (offlineLicenseLapsed) {
+            _setError('Your offline access to this lesson has expired. Please reconnect to the internet briefly to renew it, then try again.');
+          } else {
+            _setError('Connection problem loading this document. Please check your internet connection and try again.');
+          }
         } else {
           _setError('Failed to load document. Please try again.');
         }

@@ -81,6 +81,24 @@ export const LicenseManager = {
     return !!rec && rec.expiresAt > Date.now();
   },
 
+  /**
+   * True if a license record exists at all for this material, regardless
+   * of whether it's still within its TTL. Distinct from isValid() on
+   * purpose: this module was introduced (see git history) after
+   * materialCache.js already had months of real cached full-lesson
+   * content in the field with no license concept at all, so "no record"
+   * and "expired record" are NOT the same situation — the former is a
+   * pre-existing, legitimately-cached file that simply predates this
+   * gate, the latter is a real TTL lapse that should keep blocking
+   * offline access until the device goes online again. Callers use this
+   * to grandfather the first case in with a fresh license instead of
+   * permanently orphaning every lesson that was ever cached before this
+   * file existed.
+   */
+  hasRecord(materialId) {
+    return !!_load()[materialId];
+  },
+
   /** Issues a fresh license (first cache) or renews an existing one (subsequent confirmed access) — call this any time get-material-url succeeds for a cacheable material. */
   issue(materialId, storagePath, title) {
     if (!materialId) return;
