@@ -2,9 +2,10 @@
    SECURE PDF VIEWER — continuous vertical scroll
    ───────────────────────────────────────────────────────────────
    Canvas-based PDF renderer (primary content-delivery path). PDF.js
-   (window.pdfjsLib) is loaded via the UMD CDN <script> tag in
-   index.html. Uses its own internal `_el()` DOM helper rather than
-   the shared `$` from dom.js — kept as-is from the original file.
+   (window.pdfjsLib) is loaded via the local vendored <script> tag in
+   index.html (see vendor/README.md — no longer a CDN). Uses its own
+   internal `_el()` DOM helper rather than the shared `$` from dom.js
+   — kept as-is from the original file.
 
    Renders every page as its own <canvas> inside a stacked
    `.pdf-pages-container`, so the whole document scrolls naturally
@@ -22,12 +23,27 @@ import { MaterialCache } from './materialCache.js';
 import { PDFExtras } from './pdfExtras.js';
 import { LicenseManager } from './licenseManager.js';
 
+// Resolved once, as a fully absolute URL, via import.meta.url rather
+// than a bare relative string. This matters specifically because the
+// PDF.js *worker* thread has its own separate base URL (the worker
+// script's own location) distinct from this document's — a relative
+// path here would resolve correctly from the main thread but silently
+// double up or break wherever the worker itself resolves it further
+// (e.g. for cMapUrl below, which the worker also uses). Anchoring to
+// this module's own URL and going fully absolute sidesteps that
+// entirely: js/pdfViewer.js and vendor/ are both directly under
+// mobile-app/www/, so one directory up from this module lands on
+// vendor/.
+const _PDFJS_VENDOR_BASE = new URL('../vendor/pdfjs-dist/', import.meta.url).href;
+
 // Initialise the PDF.js worker source immediately — this avoids a
 // small delay on first open because the worker script starts loading
-// in the background as soon as the module is parsed.
+// in the background as soon as the module is parsed. Vendored locally
+// (see vendor/README.md) rather than fetched from a CDN, so this
+// works on a cold offline launch too, not just once something else
+// has warmed the WebView's HTTP cache.
 if (window.pdfjsLib) {
-  window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-    'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc = _PDFJS_VENDOR_BASE + 'pdf.worker.min.js';
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -527,7 +543,7 @@ export const PDFViewer = (() => {
           try {
             const loadingTask = window.pdfjsLib.getDocument({
               data:       cachedBytes,
-              cMapUrl:    'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',
+              cMapUrl:    _PDFJS_VENDOR_BASE + 'cmaps/',
               cMapPacked: true,
             });
             await _finishLoadingDoc(loadingTask, myToken);
@@ -644,10 +660,11 @@ export const PDFViewer = (() => {
 
       // ── 2. Fetch the document bytes once, then load via PDF.js ──
       try {
-        // Point the worker at the same CDN version as the main script
+        // Re-point the worker at the same local vendored file as the
+        // main script (redundant with the module-load-time init above
+        // in practice, kept for safety in case something else reset it).
         if (window.pdfjsLib) {
-          window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-            'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc = _PDFJS_VENDOR_BASE + 'pdf.worker.min.js';
         }
 
         // Fetch the bytes ONCE, rather than letting PDF.js stream from
@@ -681,7 +698,7 @@ export const PDFViewer = (() => {
         const loadingTask = window.pdfjsLib.getDocument({
           data:       arrayBuffer,
           // Standard CMap support for non-Latin character sets
-          cMapUrl:    'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',
+          cMapUrl:    _PDFJS_VENDOR_BASE + 'cmaps/',
           cMapPacked: true,
         });
 

@@ -25,13 +25,13 @@
        header in vercel.json — this app has no server response to
        attach a header to (Capacitor loads these files straight off
        disk, per the note above), so a meta tag is the only place
-       this can go. worker-src and script-src must include
-       cdn.jsdelivr.net for the exact same reason as on the website:
-       pdf.js's worker script and all third-party UMD libraries below
-       are loaded from there, pinned by version + Subresource
-       Integrity hash (see the comment further down this file).
+       this can go. Unlike the website, script-src and worker-src
+       here don't need to trust any external host at all: pdf.js's
+       worker script and every third-party UMD library below are
+       bundled locally under vendor/ (see vendor/README.md) rather
+       than fetched from a CDN, so 'self' covers all of them.
   ═══════════════════════════════════════════════════════════ -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://sjzgjtpkyvrwgdeakoah.supabase.co; media-src 'self' blob: https://sjzgjtpkyvrwgdeakoah.supabase.co; connect-src 'self' https://sjzgjtpkyvrwgdeakoah.supabase.co wss://sjzgjtpkyvrwgdeakoah.supabase.co https://api.dictionaryapi.dev; worker-src 'self' blob: https://cdn.jsdelivr.net; object-src 'none'; base-uri 'self'; form-action 'self';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://sjzgjtpkyvrwgdeakoah.supabase.co; media-src 'self' blob: https://sjzgjtpkyvrwgdeakoah.supabase.co; connect-src 'self' https://sjzgjtpkyvrwgdeakoah.supabase.co wss://sjzgjtpkyvrwgdeakoah.supabase.co https://api.dictionaryapi.dev; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self';">
   <!-- Note: frame-ancestors and upgrade-insecure-requests are omitted
        here — both are no-ops when a CSP is delivered via <meta>
        rather than an HTTP response header per spec, so including them
@@ -284,46 +284,33 @@
        runs (module scripts are always deferred until after the
        document has been parsed).
 
-       Every URL below is pinned to an EXACT version (never a floating
-       tag like "@2") and carries a Subresource Integrity hash: the
-       browser refuses to execute the file at all if a single byte
-       differs from what's hashed here. This is what actually closes
-       off a CDN-compromise / MITM attack vector that a plain <script
-       src> — even one loaded strictly over HTTPS — does not: HTTPS
-       only proves the bytes weren't tampered with in transit, not
-       that jsdelivr's own servers (or a DNS/BGP-level MITM presenting
-       a jsdelivr-like certificate) are serving the file this app was
-       actually built and tested against. It does nothing at all
-       against tampering with THIS app's own first-party JS after
-       deploy, or against a compromised device — see deviceIntegrity.js
-       and materialCache.js for the layers aimed at that instead.
+       Vendored locally under vendor/ — see vendor/README.md for the
+       exact versions, where they came from (registry.npmjs.org, a
+       different source than the CDN they used to be loaded from),
+       and how each file's bytes were verified against the
+       Subresource Integrity hashes this app was already trusting.
 
-       All four hashes were computed directly from the real npm
-       package tarballs (registry.npmjs.org), not hand-typed — pdf.js
-       is loaded from jsdelivr's npm mirror rather than cdnjs for
-       exactly this reason: jsdelivr's /npm/ endpoint is guaranteed to
-       serve a package's published tarball contents byte-for-byte, so
-       a hash computed from the npm tarball is guaranteed valid for
-       the matching jsdelivr URL. Bumping any version here means
-       recomputing its hash the same way — an old hash against new
-       bytes doesn't "mostly still work," it just stops loading.
+       These used to be loaded live from cdn.jsdelivr.net on every
+       boot. That made "offline mode" for the ENTIRE app — not just
+       the PDF viewer — depend on the WebView happening to already
+       have them in its ambient HTTP cache from some earlier online
+       session, which was never actually guaranteed: a fresh install
+       opened for the first time with no connectivity, or any device
+       whose WebView cache got cleared (low storage, OS eviction,
+       etc.), would fail to load these globals at all and the app
+       wouldn't boot. Bundling them locally makes offline support
+       unconditional instead of incidental, and as a side effect the
+       CSP above no longer needs to trust any external host for
+       scripts or workers — every origin is 'self' now.
   ═══════════════════════════════════════════════════════════ -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.115.0/dist/umd/supabase.js"
-          integrity="sha384-CLZeq1dk8+Uzrs7TVvBUdlFoV5F0DMqgRoeHa8g5wJcuPe5SkVfEvdxB0ZuzlnBQ"
-          crossorigin="anonymous"></script>
+  <script src="vendor/supabase-js/supabase.js"></script>
   <!-- DOMPurify: sanitizes any HTML from the database before injecting into the DOM -->
-  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"
-          integrity="sha384-+VfUPEb0PdtChMwmBcBmykRMDd+v6D/oFmB3rZM/puCMDYcIvF968OimRh4KQY9a"
-          crossorigin="anonymous"></script>
+  <script src="vendor/dompurify/purify.min.js"></script>
   <!-- PDF.js: canvas-based PDF renderer — prevents raw binary extraction via DOM inspection -->
-  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"
-          integrity="sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e"
-          crossorigin="anonymous"></script>
+  <script src="vendor/pdfjs-dist/pdf.min.js"></script>
   <!-- pdf-lib: used only by the admin panel, to rebuild a compressed PDF before upload
        (window.PDFLib) — see js/pdfCompressor.js -->
-  <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"
-          integrity="sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI"
-          crossorigin="anonymous"></script>
+  <script src="vendor/pdf-lib/pdf-lib.min.js"></script>
 </head>
 <body>
 
