@@ -93,6 +93,20 @@ function keyFor(materialId) {
   return new Request(`${location.origin}/__material_cache__/${encodeURIComponent(String(materialId))}`);
 }
 
+// By default, browsers/WebViews treat Cache Storage as "best-effort":
+// under device storage pressure, the platform is allowed to silently
+// evict it to reclaim space, with no warning to this app and no event
+// to react to — a student could lose a downloaded lesson for reasons
+// that have nothing to do with the 30-entry LRU cap this file
+// enforces itself. navigator.storage.persist() asks the platform to
+// exempt this origin from that best-effort eviction instead. This is
+// a one-way, best-effort REQUEST, not a guarantee it's granted (older
+// WebViews / iOS versions may not support it at all) — feature-detected
+// and fire-and-forget so its absence never blocks anything here.
+if (navigator.storage?.persist) {
+  navigator.storage.persist().catch(() => {});
+}
+
 function secureKeyName() {
   // Scoped per signed-in account, not just per device — if a second
   // student ever signs into the same physical device, their session
@@ -210,9 +224,27 @@ export const MaterialCache = {
     }
   },
 
-  /** Encrypts and persists this material's bytes for instant/offline reopening. Best-effort — failures are non-fatal since the document is already showing by the time this runs. */
+  /**
+   * Encrypts and persists this material's bytes for instant/offline
+   * reopening. Best-effort — failures are non-fatal since the
+   * document is already showing by the time this runs.
+   *
+   * Returns the array of materialIds whose CACHED BYTES this call
+   * evicted to stay under MAX_ENTRIES (usually empty). This module
+   * has no license concept of its own and deliberately doesn't import
+   * licenseManager.js (that would be a circular import — see
+   * licenseManager.js, which already imports THIS file), so it can't
+   * revoke those materials' licenses itself. Callers that also know
+   * about licenses (pdfViewer.js) are expected to revoke the license
+   * for every id in the returned array right after awaiting this.
+   * Skipping that step doesn't corrupt anything, but does leave a
+   * stale license behind: LicenseManager.isValid() would keep saying
+   * "yes, offline-ready" for a material whose actual bytes are gone,
+   * which is exactly the inconsistency this return value exists to
+   * let a caller clean up.
+   */
   async write(materialId, arrayBuffer) {
-    if (!materialId || !arrayBuffer || !('caches' in window)) return;
+    if (!materialId || !arrayBuffer || !('caches' in window)) return [];
     try {
       // Checked and reported, not gated — see read() above for why.
       DeviceIntegrity.check().catch(() => {});
@@ -234,21 +266,27 @@ export const MaterialCache = {
         headers: { 'Content-Type': 'application/octet-stream' }
       }));
 
+      // touchOrder() always pushes materialId to the END of the order
+      // list before this eviction slices from the FRONT, so the entry
+      // just written above can never end up in `evicted` itself.
       const order = touchOrder(materialId);
+      let evicted = [];
       if (order && order.length > MAX_ENTRIES) {
         const evictCount = order.length - MAX_ENTRIES;
-        const toEvict = order.slice(0, evictCount);
-        for (const id of toEvict) {
+        evicted = order.slice(0, evictCount);
+        for (const id of evicted) {
           await cache.delete(keyFor(id)).catch(() => {});
         }
         localStorage.setItem(ORDER_KEY, JSON.stringify(order.slice(evictCount)));
       }
+      return evicted;
     } catch (err) {
       // Fails closed: if encryption/storage genuinely fails, the
       // material simply isn't cached this time (falls back to a
       // normal network open next time) — it is never written
       // unencrypted as a fallback.
       console.warn('[MaterialCache] write/encrypt failed — material was NOT cached:', err);
+      return [];
     }
   },
 

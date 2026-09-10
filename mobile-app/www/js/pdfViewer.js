@@ -46,6 +46,32 @@ if (window.pdfjsLib) {
   window.pdfjsLib.GlobalWorkerOptions.workerSrc = _PDFJS_VENDOR_BASE + 'pdf.worker.min.js';
 }
 
+/**
+ * MaterialCache.write() enforces a cache-size cap by silently deleting
+ * the OLDEST cached materials' bytes once it's exceeded, and returns
+ * their ids so the license half of "downloaded for offline" can be
+ * kept in sync (materialCache.js can't do this itself — importing
+ * licenseManager.js there would be a circular import, since that file
+ * already imports this one). Without this, an evicted material keeps
+ * a perfectly valid license — LicenseManager.isValid() keeps saying
+ * "yes", the "✓ Available offline" badge keeps showing, the download
+ * button (which no-ops once a card is marked downloaded) gives the
+ * student no way to notice or fix it — right up until they try to
+ * actually open it, at which point the bytes are simply gone. This
+ * closes that gap as soon as it happens instead of leaving it to be
+ * discovered later as a confusing "not downloaded" error on a lesson
+ * the student was sure they'd downloaded.
+ *
+ * Deliberately not awaited by callers — these are OTHER materials'
+ * licenses, unrelated to whatever just finished caching successfully,
+ * so there's no reason to delay returning on their account.
+ */
+function _revokeEvictedLicenses(evictedIds) {
+  for (const id of evictedIds || []) {
+    LicenseManager.revoke(id).catch(() => {});
+  }
+}
+
 /* ─────────────────────────────────────────────────────────────
    SECURE PDF VIEWER
    ─────────────────────────────────────────────────────────────
@@ -501,6 +527,19 @@ export const PDFViewer = (() => {
 
         if (!cachedBytes) {
           noOfflineCopyAtAll = true;
+          if (LicenseManager.hasRecord(_materialId)) {
+            // A license record claims this material is offline-ready,
+            // but its actual bytes are gone — from cache eviction (see
+            // _revokeEvictedLicenses above, which is meant to prevent
+            // this going forward), the platform's own best-effort
+            // storage eviction under disk pressure, or anything else.
+            // Whatever the cause, the record is simply wrong now, and
+            // leaving it in place would keep isOfflineReady() reporting
+            // "✓ Available offline" for a lesson that silently isn't —
+            // clean it up the moment it's caught rather than letting it
+            // linger indefinitely.
+            LicenseManager.revoke(_materialId).catch(() => {});
+          }
         } else if (!LicenseManager.hasRecord(_materialId)) {
           // Bytes exist but no license record was ever created for this
           // material — this is what a lesson cached before this file
@@ -713,7 +752,7 @@ export const PDFViewer = (() => {
         // side above and materialCache.js for why encryption makes
         // that safe for paid content too.
         if (cacheable) {
-          await MaterialCache.write(_materialId, arrayBuffer);
+          _revokeEvictedLicenses(await MaterialCache.write(_materialId, arrayBuffer));
           // A successful network open IS a fresh access confirmation —
           // issues a brand-new (or renewed) 36h offline license.
           LicenseManager.issue(_materialId, material.storagePath, material.title);
@@ -872,7 +911,7 @@ export const PDFViewer = (() => {
         const arrayBuffer = await response.arrayBuffer();
 
         onProgress?.('encrypting');
-        await MaterialCache.write(materialId, arrayBuffer);
+        _revokeEvictedLicenses(await MaterialCache.write(materialId, arrayBuffer));
         // Confirm the write actually produced a usable cache entry
         // before reporting success — MaterialCache.write() fails
         // closed and silently no-ops on a flagged/unavailable device
