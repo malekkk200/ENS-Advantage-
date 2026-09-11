@@ -40,7 +40,7 @@ function persistKey() {
    perfectly good cached copy existed the whole time.
 ───────────────────────────────────────────────────────────── */
 export const CourseMaterials = {
-  // Map< "sem:moduleName:category" → Array<{ id, title, storagePath }> >
+  // Map< "sem:moduleName:category" → Array<{ id, title, storagePath, updatedAt }> >
   // A slot can now hold more than one material (e.g. several summaries
   // uploaded over time). Each array is ordered oldest -> newest,
   // matching the DB's `sort_order` (which the upload function always
@@ -72,7 +72,7 @@ export const CourseMaterials = {
       // are entitled to see — no client-side filtering needed.
       const { data, error } = await sb
         .from('course_materials')
-        .select('id, semester, module_name, category, title, storage_path')
+        .select('id, semester, module_name, category, title, storage_path, updated_at')
         // sort_order is the primary "oldest -> newest" ordering, but it
         // can collide (e.g. two rows end up with the same sort_order
         // after a delete leaves a gap that a later upload's COUNT-based
@@ -99,7 +99,12 @@ export const CourseMaterials = {
         const entry = {
           id:           row.id,
           title:        row.title,
-          storagePath:  row.storage_path
+          storagePath:  row.storage_path,
+          // The material's content-version signal, used by
+          // licenseManager.js's contentChanged() to tell "this admin
+          // genuinely replaced the file" apart from "just hasn't been
+          // reconnected in a while" — see licenseManager.js's header.
+          updatedAt:    row.updated_at
         };
         if (fresh.has(key)) {
           fresh.get(key).push(entry);

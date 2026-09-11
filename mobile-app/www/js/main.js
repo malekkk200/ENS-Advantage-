@@ -43,7 +43,6 @@ import { Content } from './content.js';
 import { PDFViewer } from './pdfViewer.js';
 import { PDFExtras } from './pdfExtras.js';
 import { ExitGuard } from './exitGuard.js';
-import { LicenseManager } from './licenseManager.js';
 import { AdminPanel } from './adminPanel.js';
 import { Protection } from './protection.js';
 import { Subscription } from './subscription.js';
@@ -89,12 +88,6 @@ PDFExtras.initGlobalListeners();
 // Double back-press to exit — no-ops entirely outside the native
 // Android/iOS app (see exitGuard.js).
 ExitGuard.init();
-
-// Silently renews any offline license nearing expiry whenever the
-// device is online — see licenseManager.js. Safe to start even
-// before the user is signed in; it no-ops until State.currentUser
-// is set.
-LicenseManager.startBackgroundRenewal();
 
 Auth.loadState();
 

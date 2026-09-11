@@ -1,52 +1,65 @@
 /* ═══════════════════════════════════════════════════════════════
-   OFFLINE LICENSE MANAGER
+   OFFLINE ACCESS RECORDS
    ───────────────────────────────────────────────────────────────
-   Adds a TTL to offline access, independent of the encryption in
-   materialCache.js. Before this module, a cached file's local
-   encryption key (secureKeyStore.js / secureStorage.js) worked
-   forever once created — a lapsed subscription had no way to revoke
-   already-cached offline content until the device came back online
-   AND the student happened to reopen that exact material (the 403
-   eviction check in pdfViewer.js). This module makes that revocation
-   check happen on a schedule instead of only opportunistically:
-   every cached material gets a license record — { issuedAt, expiresAt }
-   — and MaterialCache reads are gated on it still being valid.
+   Tracks which materials have been downloaded/cached on this device,
+   independent of the encryption in materialCache.js. A record here
+   is NOT a time-limited license any more — once a material is
+   confirmed cached, it stays available offline indefinitely. That's
+   a deliberate, explicitly requested product decision: downloaded
+   lessons should behave like a real download, not something that
+   quietly expires if the student doesn't reconnect often enough.
 
-   This deliberately does NOT introduce a new server endpoint or a
-   real "content key" issued by the server (that would be closer to
-   actual DRM, e.g. Widevine/FairPlay — see the notes handed back
-   alongside this file for why those don't apply to PDF distribution,
-   and what would be involved if this ever needs to become genuinely
-   server-issued). Instead, this reuses the *existing* get-material-url
-   call as the renewal check: any time it succeeds for a given
-   material, that IS the server re-confirming access is still valid,
-   so it's treated as license renewal too. Any time it 403s, the
-   license is revoked immediately, same as the cache eviction already
-   did. Zero new server surface, zero new attack surface — the
-   license is exactly as trustworthy as the access check already was.
+   ── What this file used to do, and why that changed ──
+   An earlier version enforced a rolling 36-hour TTL — every cached
+   material had to be re-confirmed with the server (via
+   get-material-url, reused as an implicit renewal check) at least
+   that often, or offline access to it stopped, even though the
+   encrypted bytes were still sitting on the device. That gave a
+   lapsed subscription a real, timely revocation path for offline
+   content. It also meant a student who genuinely couldn't reconnect
+   for more than ~30 hours (a multi-day trip, exam period, etc.) lost
+   access to lessons they'd legitimately downloaded — which is the
+   specific behavior this rewrite removes.
 
-   TTL default: 36 hours (the midpoint of the requested 24–48h
-   range). A license nearing expiry is proactively renewed in the
-   background (see startBackgroundRenewal) whenever the device is
-   online, so a student doesn't lose access mid-session purely
-   because a timer happened to lapse while they were using the app.
+   ── What actually still invalidates a cached copy now ──
+   1. The admin replaces a material's file. course_materials.updated_at
+      is bumped by a DB trigger on every update to that row (including
+      a plain file swap), so it's a reliable, server-enforced "this
+      changed" signal — see contentChanged() below. The next time this
+      device has synced course_materials (i.e. has been online at some
+      point — doesn't need to be online at the exact moment the lesson
+      is reopened), a version mismatch is caught and the stale cached
+      copy is evicted, forcing a fresh download of the new version.
+      This is the ordinary, expected way a lesson's local copy ever
+      goes away on its own now.
+   2. A confirmed 403 from get-material-url — the server actively
+      denying access, not merely being unreachable — still evicts the
+      local copy immediately (see pdfViewer.js). This remains the one
+      path by which an actual subscription lapse can revoke an
+      already-downloaded lesson, and only fires when the device is
+      online and the server explicitly says no.
+
+   Explicitly NOT a goal any more: guaranteeing offline access tracks
+   subscription status in anything close to real time for a device
+   that stays offline. A student whose subscription lapses and who
+   then never reconnects keeps whatever they'd already downloaded,
+   permanently. That trade-off — offline reliability over timely
+   subscription-lapse enforcement — is intentional, not an oversight;
+   reintroducing a TTL (see git history for the previous version of
+   this file) is the natural way to walk it back if that's ever
+   needed again.
 
    Storage: plain localStorage JSON, NOT the encrypted cache. Nothing
-   here is secret — a license record just says "this material ID was
-   confirmed accessible until time X," the same information the
-   server would tell anyone with a valid, still-subscribed session
-   anyway. The actual content stays protected by materialCache.js's
+   here is secret — a record just says "this material ID was
+   downloaded, and here's the content-version it was downloaded at."
+   The actual content stays protected by materialCache.js's
    encryption; this module only decides whether that decryption is
-   even attempted.
+   even attempted, and whether it's for the current version of the
+   file.
 ═══════════════════════════════════════════════════════════════ */
-import { sb } from './supabaseClient.js';
-import { State } from './state.js';
 import { MaterialCache } from './materialCache.js';
 
-const STORAGE_KEY = 'ensOfflineLicenses'; // { [materialId]: { issuedAt, expiresAt, storagePath, title } }
-const TTL_MS           = 36 * 60 * 60 * 1000; // 36h
-const RENEW_WINDOW_MS  = 6  * 60 * 60 * 1000; // proactively renew inside the last 6h of a license's life
-const SWEEP_INTERVAL_MS = 15 * 60 * 1000;     // check for renewals-due every 15 min while the app is open
+const STORAGE_KEY = 'ensOfflineLicenses'; // kept as-is (not renamed) so existing on-device records survive this update rather than being silently wiped; shape is now { [materialId]: { downloadedAt, contentVersion, storagePath, title } }
 
 function _load() {
   try {
@@ -56,59 +69,67 @@ function _load() {
 }
 
 function _save(map) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(map)); } catch (_) {} // private-browsing/quota — non-fatal, licenses just won't persist across reloads
-}
-
-/** Performs the actual server round trip that both issues and renews a license — see file header for why this reuses get-material-url rather than a dedicated endpoint. */
-async function _confirmAccess(materialId, storagePath, title) {
-  try {
-    const { error } = await sb.functions.invoke('get-material-url', {
-      body: { storage_path: storagePath, material_id: materialId, title },
-    });
-    const status = error?.context?.status ?? error?.status;
-    if (status === 403) return false;
-    if (error) return null; // offline / transient failure — NOT a denial, don't revoke on this
-    return true;
-  } catch (_) {
-    return null; // offline / transient — same as above
-  }
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(map)); } catch (_) {} // private-browsing/quota — non-fatal, records just won't persist across reloads
 }
 
 export const LicenseManager = {
-  /** True if this material currently has a non-expired license — the gate MaterialCache.read() consults before decrypting anything offline. */
+  /** True if this material has a download record at all — no time component any more, see file header. The gate MaterialCache.read() is consulted through before decrypting anything offline. */
   isValid(materialId) {
-    const rec = _load()[materialId];
-    return !!rec && rec.expiresAt > Date.now();
+    return this.hasRecord(materialId);
   },
 
   /**
-   * True if a license record exists at all for this material, regardless
-   * of whether it's still within its TTL. Distinct from isValid() on
-   * purpose: this module was introduced (see git history) after
-   * materialCache.js already had months of real cached full-lesson
-   * content in the field with no license concept at all, so "no record"
-   * and "expired record" are NOT the same situation — the former is a
-   * pre-existing, legitimately-cached file that simply predates this
-   * gate, the latter is a real TTL lapse that should keep blocking
-   * offline access until the device goes online again. Callers use this
-   * to grandfather the first case in with a fresh license instead of
-   * permanently orphaning every lesson that was ever cached before this
-   * file existed.
+   * True if a download record exists for this material. Kept as a
+   * separate name from isValid() for the callers that specifically
+   * care about "was this ever cached before this tracking existed"
+   * (grandfathering pre-existing cache entries) vs. a general
+   * permission check — the two happen to be the exact same test now
+   * that there's no time dimension, but the distinct names keep call
+   * sites' intent readable.
    */
   hasRecord(materialId) {
     return !!_load()[materialId];
   },
 
-  /** Issues a fresh license (first cache) or renews an existing one (subsequent confirmed access) — call this any time get-material-url succeeds for a cacheable material. */
-  issue(materialId, storagePath, title) {
+  /**
+   * True only when we have BOTH a recorded content-version (from when
+   * this material was downloaded) and a current one (from the
+   * caller's live or offline-synced course_materials data) AND they
+   * differ — i.e. only when the admin has genuinely replaced this
+   * file since it was cached. If either side is unknown, this never
+   * forces a re-download over a mere absence of information (e.g. a
+   * cold offline launch before course_materials has ever synced on
+   * this device, or an on-device record saved before this
+   * version-tracking existed).
+   */
+  contentChanged(materialId, currentContentVersion) {
+    const rec = _load()[materialId];
+    if (!rec?.contentVersion || !currentContentVersion) return false;
+    return rec.contentVersion !== currentContentVersion;
+  },
+
+  /**
+   * Records a material as downloaded/cached — call any time
+   * MaterialCache.write() succeeds for it (a fresh network open, or
+   * the explicit "Download for offline" button). contentVersion
+   * should be the material's current course_materials.updated_at
+   * whenever the caller has it (pass undefined/null if not — this
+   * preserves whatever version was recorded before, rather than
+   * blanking it out).
+   */
+  issue(materialId, storagePath, title, contentVersion) {
     if (!materialId) return;
     const map = _load();
-    const now = Date.now();
-    map[materialId] = { issuedAt: now, expiresAt: now + TTL_MS, storagePath: storagePath || map[materialId]?.storagePath || '', title: title || map[materialId]?.title || '' };
+    map[materialId] = {
+      downloadedAt:   map[materialId]?.downloadedAt ?? Date.now(),
+      contentVersion: contentVersion ?? map[materialId]?.contentVersion ?? null,
+      storagePath:    storagePath || map[materialId]?.storagePath || '',
+      title:          title || map[materialId]?.title || ''
+    };
     _save(map);
   },
 
-  /** Revokes a license immediately — call on a confirmed 403 (access actually denied), never on a mere offline/network failure. */
+  /** Revokes a download record immediately — call on a confirmed 403 (access actually denied), a detected content-version change (the cached file is for a superseded version), or a record found to be stale (bytes missing despite a record claiming otherwise). Never on a mere offline/network failure. */
   async revoke(materialId) {
     const map = _load();
     if (map[materialId]) {
@@ -118,47 +139,8 @@ export const LicenseManager = {
     await MaterialCache.evict(materialId);
   },
 
-  /** Wipes every license — call on logout, alongside MaterialCache.clear(). */
+  /** Wipes every download record — call on logout, alongside MaterialCache.clear(). */
   clear() {
     try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
-  },
-
-  /** Materials whose license expires within RENEW_WINDOW_MS (or already has), for the background sweep below. */
-  _dueForRenewal() {
-    const map = _load();
-    const cutoff = Date.now() + RENEW_WINDOW_MS;
-    return Object.entries(map)
-      .filter(([, rec]) => rec.expiresAt < cutoff)
-      .map(([materialId, rec]) => ({ materialId, storagePath: rec.storagePath, title: rec.title }));
-  },
-
-  /**
-   * Starts a background sweep that silently renews any license nearing
-   * expiry while the device is online — the "mandatory background
-   * synchronization and renewal" requirement. Runs on an interval
-   * AND immediately whenever the browser regains connectivity (the
-   * moment renewal is actually possible after being offline).
-   * Safe to call once at app boot; a second call is a silent no-op.
-   */
-  startBackgroundRenewal() {
-    if (this._started) return;
-    this._started = true;
-
-    const sweep = async () => {
-      if (!navigator.onLine || !State.currentUser) return;
-      for (const { materialId, storagePath, title } of this._dueForRenewal()) {
-        const ok = await _confirmAccess(materialId, storagePath, title);
-        if (ok === true) this.issue(materialId, storagePath, title);
-        else if (ok === false) await this.revoke(materialId); // real 403 — subscription actually lapsed
-        // ok === null (offline/transient): leave the existing license alone, try again next sweep
-      }
-    };
-
-    setInterval(sweep, SWEEP_INTERVAL_MS);
-    window.addEventListener('online', sweep);
-    // One initial sweep shortly after boot, in case licenses were
-    // already stale from a previous session (e.g. the app was closed
-    // for two days).
-    setTimeout(sweep, 5000);
   }
 };

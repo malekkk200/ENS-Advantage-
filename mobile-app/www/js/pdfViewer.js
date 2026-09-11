@@ -46,32 +46,6 @@ if (window.pdfjsLib) {
   window.pdfjsLib.GlobalWorkerOptions.workerSrc = _PDFJS_VENDOR_BASE + 'pdf.worker.min.js';
 }
 
-/**
- * MaterialCache.write() enforces a cache-size cap by silently deleting
- * the OLDEST cached materials' bytes once it's exceeded, and returns
- * their ids so the license half of "downloaded for offline" can be
- * kept in sync (materialCache.js can't do this itself — importing
- * licenseManager.js there would be a circular import, since that file
- * already imports this one). Without this, an evicted material keeps
- * a perfectly valid license — LicenseManager.isValid() keeps saying
- * "yes", the "✓ Available offline" badge keeps showing, the download
- * button (which no-ops once a card is marked downloaded) gives the
- * student no way to notice or fix it — right up until they try to
- * actually open it, at which point the bytes are simply gone. This
- * closes that gap as soon as it happens instead of leaving it to be
- * discovered later as a confusing "not downloaded" error on a lesson
- * the student was sure they'd downloaded.
- *
- * Deliberately not awaited by callers — these are OTHER materials'
- * licenses, unrelated to whatever just finished caching successfully,
- * so there's no reason to delay returning on their account.
- */
-function _revokeEvictedLicenses(evictedIds) {
-  for (const id of evictedIds || []) {
-    LicenseManager.revoke(id).catch(() => {});
-  }
-}
-
 /* ─────────────────────────────────────────────────────────────
    SECURE PDF VIEWER
    ─────────────────────────────────────────────────────────────
@@ -505,20 +479,23 @@ export const PDFViewer = (() => {
       // ── 0. Instant path: already-cached content (works fully offline) ──
       // Skips both the Edge Function round trip and the PDF network
       // fetch entirely, decrypting straight from the on-device cache
-      // — see materialCache.js. Now covers both 'summary' (free) and
+      // — see materialCache.js. Covers both 'summary' (free) and
       // 'fullLesson' (paid) content: paid lessons are safe to persist
       // here because they're encrypted at rest with a key that never
       // leaves this device's secure enclave, not because they're
-      // treated as any less sensitive than before.
+      // treated as any less sensitive than before. Once downloaded, a
+      // material stays available offline indefinitely — see
+      // licenseManager.js — until either the admin genuinely replaces
+      // its file (caught below) or a confirmed 403 revokes it.
       //
       // These two flags record WHY the instant path below didn't
       // satisfy the request (if it didn't) — used further down to give
       // an honest, actionable error instead of a generic "check your
       // internet connection" message when the real problem is "this
-      // was never downloaded" or "its offline license lapsed," neither
-      // of which a WiFi toggle fixes.
-      let noOfflineCopyAtAll   = false;
-      let offlineLicenseLapsed = false;
+      // was never downloaded" or "the admin has since replaced this
+      // file," neither of which a WiFi toggle fixes.
+      let noOfflineCopyAtAll = false;
+      let contentOutdated    = false;
 
       const cacheable = type === 'summary' || type === 'fullLesson';
       if (cacheable) {
@@ -528,56 +505,59 @@ export const PDFViewer = (() => {
         if (!cachedBytes) {
           noOfflineCopyAtAll = true;
           if (LicenseManager.hasRecord(_materialId)) {
-            // A license record claims this material is offline-ready,
-            // but its actual bytes are gone — from cache eviction (see
-            // _revokeEvictedLicenses above, which is meant to prevent
-            // this going forward), the platform's own best-effort
-            // storage eviction under disk pressure, or anything else.
-            // Whatever the cause, the record is simply wrong now, and
-            // leaving it in place would keep isOfflineReady() reporting
-            // "✓ Available offline" for a lesson that silently isn't —
-            // clean it up the moment it's caught rather than letting it
-            // linger indefinitely.
+            // A download record claims this material is offline-ready,
+            // but its actual bytes are gone — from the platform's own
+            // best-effort storage eviction under disk pressure, or
+            // anything else. Whatever the cause, the record is simply
+            // wrong now, and leaving it in place would keep
+            // isOfflineReady() reporting "✓ Available offline" for a
+            // lesson that silently isn't — clean it up the moment
+            // it's caught rather than letting it linger indefinitely.
             LicenseManager.revoke(_materialId).catch(() => {});
           }
+        } else if (LicenseManager.contentChanged(_materialId, material.updatedAt)) {
+          // The admin has replaced this material's file since it was
+          // cached (see licenseManager.js's contentChanged()) — the
+          // cached bytes are for a superseded version. Never silently
+          // serve outdated content just because SOMETHING is cached;
+          // evict it and require a fresh download of the current file.
+          await MaterialCache.evict(_materialId);
+          LicenseManager.revoke(_materialId).catch(() => {});
+          contentOutdated = true;
         } else if (!LicenseManager.hasRecord(_materialId)) {
-          // Bytes exist but no license record was ever created for this
-          // material — this is what a lesson cached before this file
-          // existed looks like (see licenseManager.js's hasRecord() doc),
-          // not a lapsed subscription. Grandfather it in with a fresh
-          // license rather than treating "predates this feature" the
-          // same as "access was actually revoked."
-          LicenseManager.issue(_materialId, material.storagePath, material.title);
-        } else if (!LicenseManager.isValid(_materialId)) {
-          offlineLicenseLapsed = true;
+          // Bytes exist but no download record was ever created for
+          // this material — this is what a lesson cached before this
+          // tracking existed looks like (see licenseManager.js's
+          // hasRecord() doc), not a revoked or outdated download.
+          // Grandfather it in with a fresh record rather than treating
+          // "predates this feature" the same as "access was revoked."
+          LicenseManager.issue(_materialId, material.storagePath, material.title, material.updatedAt);
         }
+        // else: has a record, content unchanged — proceed to the
+        // instant render below exactly as normal.
 
-        // Gated on the offline license (see licenseManager.js), not just
-        // on the bytes being present: a lapsed, unrenewed license means
-        // this cached copy is treated as unusable offline even though
-        // it's still sitting there encrypted, until the device is back
-        // online long enough for a renewal (or a fresh network open) to
-        // confirm access again. This is the actual TTL enforcement point.
-        if (cachedBytes && LicenseManager.isValid(_materialId)) {
+        // Gated on there being a download record at all (see
+        // licenseManager.js) and the content not having changed
+        // underneath us (handled just above) — not merely on the
+        // bytes being present.
+        if (cachedBytes && !contentOutdated && LicenseManager.isValid(_materialId)) {
           // Tell the server this material was viewed again — this is
           // still awaited-in-the-background (not blocking render, but
           // its result IS inspected) rather than pure fire-and-forget,
-          // because for 'fullLesson' this doubles as BOTH the
-          // revocation check described in materialCache.js's header
-          // AND the license-renewal signal described in
-          // licenseManager.js: a clean success extends the license's
-          // TTL, a real 403 revokes it (and the cached bytes) outright.
-          // Any other outcome (simply being offline right now, or some
+          // because for 'fullLesson' this doubles as the revocation
+          // check described in materialCache.js's header: a real 403
+          // revokes the license (and the cached bytes) outright. Any
+          // other outcome (simply being offline right now, or some
           // transient failure) leaves both the cache and the existing
-          // license alone — being offline is the whole point of this
+          // record alone — being offline is the whole point of this
           // cache, not a reason to distrust it.
           sb.functions.invoke('get-material-url', {
             body: { storage_path: material.storagePath, material_id: material.id, title: material.title },
           }).then(({ error }) => {
             const status = error?.context?.status ?? error?.status;
             if (status === 403) LicenseManager.revoke(_materialId);
-            else if (!error) LicenseManager.issue(_materialId, material.storagePath, material.title);
-          }).catch(() => {}); // offline, or anything else — leave the cached copy + license alone
+            else if (!error) LicenseManager.issue(_materialId, material.storagePath, material.title, material.updatedAt);
+          }).catch(() => {}); // offline, or anything else — leave the cached copy + record alone
 
           try {
             const loadingTask = window.pdfjsLib.getDocument({
@@ -616,10 +596,10 @@ export const PDFViewer = (() => {
         // otherwise succeed; it only short-circuits ones that can't.)
         if (navigator.onLine === false) {
           if (myToken !== _openToken) return; // superseded while awaiting
-          if (noOfflineCopyAtAll) {
-            _setError("This lesson hasn't been downloaded for offline use yet. Connect to the internet, then open it once (or tap the ⬇ download button on the lesson) — after that it'll be available offline anytime.");
+          if (contentOutdated) {
+            _setError("This lesson has been updated since you downloaded it. Connect to the internet to get the latest version.");
           } else {
-            _setError('Your offline access to this lesson has expired. Please reconnect to the internet briefly to renew it, then try again.');
+            _setError("This lesson hasn't been downloaded for offline use yet. Connect to the internet, then open it once (or tap the ⬇ download button on the lesson) — after that it'll be available offline anytime.");
           }
           return;
         }
@@ -667,14 +647,14 @@ export const PDFViewer = (() => {
             // response (network/CORS-level failure) — this used to
             // always show a generic "check your internet" message even
             // when we'd actually just failed to find a usable offline
-            // copy (see noOfflineCopyAtAll/offlineLicenseLapsed above:
-            // a real connectivity hiccup and "this lesson was never
+            // copy (see noOfflineCopyAtAll/contentOutdated above: a
+            // real connectivity hiccup and "this lesson was never
             // downloaded" look identical from here unless we use what
             // was already learned in step 0).
-            if (noOfflineCopyAtAll) {
+            if (contentOutdated) {
+              _setError("This lesson has been updated since you downloaded it. Connect to the internet to get the latest version.");
+            } else if (noOfflineCopyAtAll) {
               _setError("This lesson hasn't been downloaded for offline use yet. Connect to the internet, then open it once (or tap the ⬇ download button on the lesson) — after that it'll be available offline anytime.");
-            } else if (offlineLicenseLapsed) {
-              _setError('Your offline access to this lesson has expired. Please reconnect to the internet briefly to renew it, then try again.');
             } else {
               _setError('Connection problem loading this document. Please check your internet connection and try again.');
             }
@@ -687,10 +667,10 @@ export const PDFViewer = (() => {
       } catch (err) {
         if (myToken !== _openToken) return; // superseded by a newer open() while awaiting
         console.error('[PDFViewer] Network error during signed URL generation:', err);
-        if (noOfflineCopyAtAll) {
+        if (contentOutdated) {
+          _setError("This lesson has been updated since you downloaded it. Connect to the internet to get the latest version.");
+        } else if (noOfflineCopyAtAll) {
           _setError("This lesson hasn't been downloaded for offline use yet. Connect to the internet, then open it once (or tap the ⬇ download button on the lesson) — after that it'll be available offline anytime.");
-        } else if (offlineLicenseLapsed) {
-          _setError('Your offline access to this lesson has expired. Please reconnect to the internet briefly to renew it, then try again.');
         } else {
           _setError('Network error. Please check your connection and try again.');
         }
@@ -752,10 +732,11 @@ export const PDFViewer = (() => {
         // side above and materialCache.js for why encryption makes
         // that safe for paid content too.
         if (cacheable) {
-          _revokeEvictedLicenses(await MaterialCache.write(_materialId, arrayBuffer));
+          await MaterialCache.write(_materialId, arrayBuffer);
           // A successful network open IS a fresh access confirmation —
-          // issues a brand-new (or renewed) 36h offline license.
-          LicenseManager.issue(_materialId, material.storagePath, material.title);
+          // records this download (permanently, alongside the current
+          // content-version) or refreshes an existing record's version.
+          LicenseManager.issue(_materialId, material.storagePath, material.title, material.updatedAt);
         }
 
       } catch (err) {
@@ -773,10 +754,10 @@ export const PDFViewer = (() => {
           // get-material-url branch above: prefer the specific,
           // actionable reason we already know over a generic
           // "check your internet" message when we have one.
-          if (noOfflineCopyAtAll) {
+          if (contentOutdated) {
+            _setError("This lesson has been updated since you downloaded it. Connect to the internet to get the latest version.");
+          } else if (noOfflineCopyAtAll) {
             _setError("This lesson hasn't been downloaded for offline use yet. Connect to the internet, then open it once (or tap the ⬇ download button on the lesson) — after that it'll be available offline anytime.");
-          } else if (offlineLicenseLapsed) {
-            _setError('Your offline access to this lesson has expired. Please reconnect to the internet briefly to renew it, then try again.');
           } else {
             _setError('Connection problem loading this document. Please check your internet connection and try again.');
           }
@@ -863,16 +844,17 @@ export const PDFViewer = (() => {
      * The file never leaves the app unencrypted at any point — this
      * calls the exact same MaterialCache.write() (AES-256-GCM,
      * device-Keystore/Keychain-backed key) and LicenseManager.issue()
-     * (36h offline license) that opening the material online already
-     * triggers; this just does it on demand, ahead of time, without
-     * requiring the student to open the full document first. There is
-     * no "save to Files/Downloads" step anywhere in this path — the
-     * bytes go straight from the network response into the encrypted
-     * cache and are never written anywhere else.
+     * (a permanent download record — see licenseManager.js) that
+     * opening the material online already triggers; this just does it
+     * on demand, ahead of time, without requiring the student to open
+     * the full document first. There is no "save to Files/Downloads"
+     * step anywhere in this path — the bytes go straight from the
+     * network response into the encrypted cache and are never written
+     * anywhere else.
      *
      * @param {object} mod       Module object { name, … }
      * @param {string} type      'summary' | 'fullLesson' (not 'guide' — that's a separate text+images flow, not a cached PDF)
-     * @param {object} material  { id, title, storagePath }
+     * @param {object} material  { id, title, storagePath, updatedAt }
      * @param {function} [onProgress] optional callback('checking'|'fetching_url'|'downloading'|'encrypting')
      * @returns {Promise<{ok: boolean, reason?: string, alreadyCached?: boolean}>}
      */
@@ -882,11 +864,14 @@ export const PDFViewer = (() => {
       if (type !== 'summary' && type !== 'fullLesson') return { ok: false, reason: 'not_cacheable' };
 
       onProgress?.('checking');
-      // Already have a valid, usable offline copy? Nothing to do —
-      // this also means tapping "Download" again after it's already
-      // downloaded is a safe, cheap no-op rather than a redundant
-      // re-fetch.
-      if (LicenseManager.isValid(materialId)) {
+      // Already have a valid, usable, CURRENT offline copy? Nothing to
+      // do — this also means tapping "Download" again after it's
+      // already downloaded is a safe, cheap no-op rather than a
+      // redundant re-fetch. contentChanged() is checked here too, so
+      // a lesson the admin has since replaced doesn't report as
+      // "already cached" — it falls through and re-downloads the
+      // current version instead.
+      if (LicenseManager.isValid(materialId) && !LicenseManager.contentChanged(materialId, material.updatedAt)) {
         const existing = await MaterialCache.read(materialId);
         if (existing) return { ok: true, alreadyCached: true };
       }
@@ -911,7 +896,7 @@ export const PDFViewer = (() => {
         const arrayBuffer = await response.arrayBuffer();
 
         onProgress?.('encrypting');
-        _revokeEvictedLicenses(await MaterialCache.write(materialId, arrayBuffer));
+        await MaterialCache.write(materialId, arrayBuffer);
         // Confirm the write actually produced a usable cache entry
         // before reporting success — MaterialCache.write() fails
         // closed and silently no-ops on a flagged/unavailable device
@@ -920,7 +905,7 @@ export const PDFViewer = (() => {
         const verify = await MaterialCache.read(materialId);
         if (!verify) return { ok: false, reason: 'cache_write_failed' };
 
-        LicenseManager.issue(materialId, material.storagePath, material.title);
+        LicenseManager.issue(materialId, material.storagePath, material.title, material.updatedAt);
         return { ok: true };
       } catch (err) {
         console.warn('[PDFViewer] prefetchOffline failed:', err);
@@ -928,7 +913,7 @@ export const PDFViewer = (() => {
       }
     },
 
-    /** Synchronous check for whether a material currently has a usable offline copy — cheap, no network/decryption, safe to call for every card on render. */
+    /** Synchronous check for whether a material currently has a usable offline copy — cheap, no network/decryption, safe to call for every card on render. Does not check for a content-version change against a live value (that would require an async fetch); a card can briefly show "✓ Available offline" for a copy that turns out to be outdated the next time it's actually opened or re-downloaded, at which point contentChanged() (see licenseManager.js) catches it. */
     isOfflineReady(materialId) {
       return !!materialId && LicenseManager.isValid(materialId);
     }

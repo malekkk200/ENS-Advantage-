@@ -46,22 +46,20 @@
 
    Revocation: a subscription that lapses AFTER a lesson was cached
    doesn't retroactively delete the local copy on its own — there is
-   no push mechanism to a fully offline device. What DOES happen: any
-   time this material is opened while online, the existing
-   get-material-url call (see pdfViewer.js) still runs in the
-   background even on a cache hit, purely to keep the audit trail
-   current; if the server now says access is denied (403), the local
-   copy is evicted right there, so it can't keep being opened offline
-   indefinitely after the student is next online. On top of that, see
-   licenseManager.js: every cached file also carries a 36h TTL that's
-   checked BEFORE this module ever decrypts anything, and is
-   proactively renewed in the background while online — so an
-   already-lapsed subscription stops granting offline access even on
-   a device that never happens to reopen that exact material, once
-   its license's TTL runs out. A student who never reconnects at all
-   keeps offline access to whatever they already cached until that
-   TTL lapses — an inherent, accepted limitation of any offline-
-   capable scheme, not something unique to this implementation.
+   no push mechanism to a fully offline device, and (as of this
+   version) no background TTL sweep either; downloaded content is
+   meant to stay available offline indefinitely once cached. See
+   licenseManager.js for the two things that DO still invalidate a
+   cached copy: a confirmed 403 from the server (an actual access
+   denial, checked in the background even on a cache hit while
+   online — see pdfViewer.js), or the admin genuinely replacing the
+   material's file, detected via course_materials.updated_at
+   (licenseManager.js's contentChanged()) the next time this device
+   has synced that table. A student who never reconnects at all keeps
+   whatever they already cached indefinitely — this is now a
+   deliberate design choice (offline reliability over timely
+   subscription-lapse enforcement), not an inherent limitation being
+   tolerated.
 
    Device integrity: see deviceIntegrity.js. Checked on every read()/
    write(), and a genuine finding is reported through the security-log
@@ -84,8 +82,6 @@ import { SecureStorageBridge } from './secureStorage.js';
 import { DeviceIntegrity } from './deviceIntegrity.js';
 
 const CACHE_NAME  = 'ens-materials-v2'; // v2: now encrypted — a v1 (plaintext) entry must never be read back and treated as valid ciphertext
-const ORDER_KEY    = 'ensMaterialCacheOrder';
-const MAX_ENTRIES  = 30; // slightly higher than the old free-only cap, now that this also covers paid lessons students want to keep offline
 const IV_BYTES     = 12; // 96-bit IV — the size AES-GCM is designed around
 const KEY_ALG      = { name: 'AES-GCM', length: 256 };
 
@@ -170,20 +166,6 @@ function _getCryptoKey() {
   return _cryptoKeyPromise;
 }
 
-/** Moves materialId to the most-recently-used end of the order list; returns the new list, or null if localStorage is unavailable. */
-function touchOrder(materialId) {
-  try {
-    let order = JSON.parse(localStorage.getItem(ORDER_KEY) || '[]');
-    if (!Array.isArray(order)) order = [];
-    order = order.filter(id => id !== materialId);
-    order.push(materialId);
-    localStorage.setItem(ORDER_KEY, JSON.stringify(order));
-    return order;
-  } catch {
-    return null; // private browsing / quota / unavailable — non-fatal, just skip LRU bookkeeping
-  }
-}
-
 export const MaterialCache = {
   /** Returns a decrypted ArrayBuffer if this material's bytes are cached, otherwise null. Never throws. */
   async read(materialId) {
@@ -212,7 +194,6 @@ export const MaterialCache = {
       const key = await _withTimeout(_getCryptoKey(), KEY_TIMEOUT_MS, 'MaterialCache read: key acquisition');
       const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext);
 
-      touchOrder(materialId);
       return plaintext;
     } catch (err) {
       // Covers: corrupted/truncated entry, wrong key (e.g. secure
@@ -227,24 +208,11 @@ export const MaterialCache = {
   /**
    * Encrypts and persists this material's bytes for instant/offline
    * reopening. Best-effort — failures are non-fatal since the
-   * document is already showing by the time this runs.
-   *
-   * Returns the array of materialIds whose CACHED BYTES this call
-   * evicted to stay under MAX_ENTRIES (usually empty). This module
-   * has no license concept of its own and deliberately doesn't import
-   * licenseManager.js (that would be a circular import — see
-   * licenseManager.js, which already imports THIS file), so it can't
-   * revoke those materials' licenses itself. Callers that also know
-   * about licenses (pdfViewer.js) are expected to revoke the license
-   * for every id in the returned array right after awaiting this.
-   * Skipping that step doesn't corrupt anything, but does leave a
-   * stale license behind: LicenseManager.isValid() would keep saying
-   * "yes, offline-ready" for a material whose actual bytes are gone,
-   * which is exactly the inconsistency this return value exists to
-   * let a caller clean up.
+   * document is already showing by the time this runs. No cap on how
+   * many materials can be cached this way — see this file's header.
    */
   async write(materialId, arrayBuffer) {
-    if (!materialId || !arrayBuffer || !('caches' in window)) return [];
+    if (!materialId || !arrayBuffer || !('caches' in window)) return;
     try {
       // Checked and reported, not gated — see read() above for why.
       DeviceIntegrity.check().catch(() => {});
@@ -265,28 +233,12 @@ export const MaterialCache = {
         // and hands the Response straight to something PDF-shaped).
         headers: { 'Content-Type': 'application/octet-stream' }
       }));
-
-      // touchOrder() always pushes materialId to the END of the order
-      // list before this eviction slices from the FRONT, so the entry
-      // just written above can never end up in `evicted` itself.
-      const order = touchOrder(materialId);
-      let evicted = [];
-      if (order && order.length > MAX_ENTRIES) {
-        const evictCount = order.length - MAX_ENTRIES;
-        evicted = order.slice(0, evictCount);
-        for (const id of evicted) {
-          await cache.delete(keyFor(id)).catch(() => {});
-        }
-        localStorage.setItem(ORDER_KEY, JSON.stringify(order.slice(evictCount)));
-      }
-      return evicted;
     } catch (err) {
       // Fails closed: if encryption/storage genuinely fails, the
       // material simply isn't cached this time (falls back to a
       // normal network open next time) — it is never written
       // unencrypted as a fallback.
       console.warn('[MaterialCache] write/encrypt failed — material was NOT cached:', err);
-      return [];
     }
   },
 
@@ -309,7 +261,6 @@ export const MaterialCache = {
    */
   async clear() {
     try { await caches.delete(CACHE_NAME); } catch (_) {}
-    try { localStorage.removeItem(ORDER_KEY); } catch (_) {}
     try { await SecureStorageBridge.removeItem(secureKeyName()); } catch (_) {}
     _cryptoKeyPromise = null;
   }
