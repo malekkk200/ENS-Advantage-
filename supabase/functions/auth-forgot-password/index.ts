@@ -1,16 +1,31 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import nodemailer from 'npm:nodemailer';
 
-const CORS = {
-  'Access-Control-Allow-Origin': 'https://ens-advantage.vercel.app',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+const ALLOWED_ORIGINS = [
+  'https://ens-advantage.vercel.app',
+  Deno.env.get('EXTRA_ALLOWED_ORIGIN') ?? '',
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  // Native app (Capacitor, mobile-app/) — without these, password-reset
+  // requests from the app succeed server-side but the WebView silently
+  // discards the response on the CORS mismatch, and the app shows a
+  // generic "network error" instead of ever completing. See
+  // supabase/functions/_shared/security.ts, which needed this
+  // identical origin list first.
+  'https://localhost',      // Android (Capacitor default androidScheme)
+  'capacitor://localhost',  // iOS (Capacitor default ios scheme)
+  'http://localhost',       // defensive extra for older WebViews
+].filter(Boolean);
 
-const json = (data: unknown, status = 200) =>
-  new Response(JSON.stringify(data), {
-    status,
-    headers: { ...CORS, 'Content-Type': 'application/json' },
-  });
+function corsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get('origin') ?? '';
+  const allowOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return {
+    'Access-Control-Allow-Origin': allowOrigin,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Vary': 'Origin',
+  };
+}
 
 const MAX_ATTEMPTS = 5;
 
@@ -91,7 +106,15 @@ async function findUserByEmail(
 
 // ─── Main handler ─────────────────────────────────────────────────────────────
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders(req) });
+
+  // Defined per-request (captures THIS request's own Origin via
+  // closure) rather than at module scope — see auth-signup for why.
+  const json = (data: unknown, status = 200) =>
+    new Response(JSON.stringify(data), {
+      status,
+      headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
+    });
 
   try {
     const body = await req.json().catch(() => ({}));

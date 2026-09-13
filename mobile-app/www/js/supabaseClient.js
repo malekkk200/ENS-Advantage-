@@ -1,9 +1,10 @@
 /* ═══════════════════════════════════════════════════════════════
    SUPABASE CLIENT
    ───────────────────────────────────────────────────────────────
-   Creates the Supabase client (window.supabase comes from the UMD
-   CDN <script> tag loaded in index.html — no bundler required) and
-   exposes two small helpers used throughout the app:
+   Creates the Supabase client (window.supabase comes from the local
+   vendored UMD <script> tag loaded in index.html — see vendor/README.md
+   — no bundler required) and exposes two small helpers used
+   throughout the app:
      • sb                    — the raw Supabase client
      • Supabase.callFunction / callFunctionMultipart
                               — fetch wrappers for Edge Functions
