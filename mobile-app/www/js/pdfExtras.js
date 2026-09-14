@@ -55,12 +55,29 @@ export const PDFExtras = (() => {
   let _pages      = [];      // same array pdfViewer.js builds: [{ num, wrapper, canvas, rendered }]
   let _gotoPage   = null;    // (n) => void, supplied by pdfViewer.js
   let _getScale   = null;    // () => number, supplied by pdfViewer.js
+  let _getZoomLevel = null;  // () => number (1.0 = 100%), supplied by pdfViewer.js
+  let _setZoomLevel = null;  // async (level) => void — commits an exact zoom + re-renders, supplied by pdfViewer.js
   let _textCache  = new Map(); // pageNum -> { textContent, viewport } — built lazily, once per page per open()
 
   // ── Pan tool ───────────────────────────────────────────────────
   let _panActive  = false;
   let _panDragging = false;
   let _panStart   = { x: 0, y: 0, scrollLeft: 0, scrollTop: 0 };
+
+  // ── Pinch-to-zoom (touch) ────────────────────────────────────────
+  // Independent of the pan tool's on/off toggle above — a two-finger
+  // touch always pinch-zooms, whether or not the hand tool is active,
+  // matching how every other touch PDF/photo viewer behaves. During
+  // the gesture this applies a live CSS transform for instant, GPU-
+  // accelerated visual feedback with zero re-rendering cost (PDF.js
+  // re-rasterizing on every touchmove would be far too slow to feel
+  // fluid); only once the gesture ends does it commit the real zoom
+  // level and trigger one crisp re-render at the new resolution.
+  let _pinchPointers  = new Map(); // pointerId -> {x, y}, touch-type pointers only
+  let _pinchStartDist = 0;         // distance between the two fingers when the gesture started
+  let _pinchBaseZoom  = 1;         // the committed zoom level the gesture started from
+  let _pinchOriginX   = 0;         // gesture midpoint, in viewport coordinates — fixed for the gesture's duration
+  let _pinchOriginY   = 0;
 
   // ── Search ──────────────────────────────────────────────────────
   let _searchOpen    = false;
@@ -373,6 +390,77 @@ export const PDFExtras = (() => {
     _el('pdf-canvas-zone')?.classList.remove('panning');
   }
 
+  /* ── Pinch-to-zoom (touch) ─────────────────────────────────────── */
+
+  function _pinchDist(a, b) {
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  }
+
+  function _onPinchDown(e) {
+    if (e.pointerType !== 'touch' || !_setZoomLevel) return;
+    _pinchPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (_pinchPointers.size !== 2) return; // only the 2nd finger actually starts a pinch
+
+    // A second finger just joined — this always starts a pinch, even
+    // if a single-finger pan-drag was already in progress (the pan
+    // tool doesn't need to be toggled on for this). Cancel that drag
+    // cleanly so the two gestures never fight over scroll position.
+    _panDragging = false;
+    const zone = _el('pdf-canvas-zone');
+    zone?.classList.remove('panning');
+
+    const pts = [..._pinchPointers.values()];
+    _pinchStartDist = _pinchDist(pts[0], pts[1]);
+    _pinchBaseZoom  = _getZoomLevel ? _getZoomLevel() : 1;
+    _pinchOriginX = (pts[0].x + pts[1].x) / 2;
+    _pinchOriginY = (pts[0].y + pts[1].y) / 2;
+    zone?.classList.add('pinching');
+    e.preventDefault();
+  }
+
+  function _onPinchMove(e) {
+    if (!_pinchPointers.has(e.pointerId)) return;
+    _pinchPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (_pinchPointers.size !== 2 || !_pinchStartDist) return;
+
+    const pts = [..._pinchPointers.values()];
+    const ratio = _pinchDist(pts[0], pts[1]) / _pinchStartDist;
+    const container = _el('pdf-pages-container');
+    if (container) {
+      // Purely visual — no re-render happens until the gesture ends
+      // (see _onPinchUp). transform-origin is fixed at the gesture's
+      // starting midpoint rather than tracked live, which is simpler
+      // and matches how most touch pinch-zoom implementations behave.
+      container.style.transformOrigin = `${_pinchOriginX}px ${_pinchOriginY}px`;
+      container.style.transform = `scale(${ratio})`;
+    }
+    e.preventDefault();
+  }
+
+  function _onPinchUp(e) {
+    const wasPinching = _pinchPointers.size === 2 && _pinchStartDist > 0;
+    _pinchPointers.delete(e.pointerId);
+    if (!wasPinching || _pinchPointers.size >= 2) return; // still 2+ fingers down (a 3rd was involved) — keep pinching
+
+    const container = _el('pdf-pages-container');
+    const zone = _el('pdf-canvas-zone');
+    const liveTransform = container?.style.transform || '';
+    const match = /scale\(([\d.]+)\)/.exec(liveTransform);
+    const ratio = match ? parseFloat(match[1]) : 1;
+
+    if (container) { container.style.transform = ''; container.style.transformOrigin = ''; }
+    zone?.classList.remove('pinching');
+    _pinchStartDist = 0;
+
+    // Commit the real zoom level and trigger the one actual re-render
+    // for this whole gesture, at whatever level the live scale settled
+    // on. Skipped entirely for a negligible pinch (e.g. a near-static
+    // two-finger tap) so it doesn't force a pointless re-render.
+    if (Math.abs(ratio - 1) > 0.01 && _setZoomLevel) {
+      _setZoomLevel(_pinchBaseZoom * ratio);
+    }
+  }
+
   /* ── Theme (dark / sepia) ─────────────────────────────────────── */
 
   function _applyTheme(theme) {
@@ -401,8 +489,9 @@ export const PDFExtras = (() => {
   // ── Public API ─────────────────────────────────────────────────
   return {
     /** Called once by pdfViewer.js after a document's pages are built and shown. */
-    onDocumentReady({ pdfDoc, pages, gotoPage, getScale }) {
+    onDocumentReady({ pdfDoc, pages, gotoPage, getScale, getZoomLevel, setZoomLevel }) {
       _pdfDoc = pdfDoc; _pages = pages; _gotoPage = gotoPage; _getScale = getScale;
+      _getZoomLevel = getZoomLevel; _setZoomLevel = setZoomLevel;
       _textCache = new Map();
       _searchMatches = []; _searchIndex = -1; _searchQuery = '';
       const input = _el('pdf-search-input');
@@ -515,6 +604,15 @@ export const PDFExtras = (() => {
       window.addEventListener('pointermove', _onPanMove);
       window.addEventListener('pointerup', _onPanUp);
       window.addEventListener('pointercancel', _onPanUp);
+
+      // Pinch-to-zoom — same pointerdown/move/up wiring pattern as the
+      // pan tool above, registered independently since a two-finger
+      // touch should always pinch-zoom regardless of whether the hand
+      // tool happens to be toggled on.
+      zone.addEventListener('pointerdown', _onPinchDown);
+      window.addEventListener('pointermove', _onPinchMove);
+      window.addEventListener('pointerup', _onPinchUp);
+      window.addEventListener('pointercancel', _onPinchUp);
 
       // Lazily build the word-hit-layer for a page once it's actually
       // rendered — piggybacks on the same IntersectionObserver timing

@@ -308,6 +308,16 @@
 .pdf-canvas-zone.pan-mode { cursor: grab; overflow-x: auto; touch-action: none; }
 .pdf-canvas-zone.pan-mode.panning { cursor: grabbing; }
 
+/* ── Pinch-to-zoom (touch) ──
+   touch-action: none while an active 2-finger gesture is in progress
+   so the browser/WebView doesn't also try to interpret it natively
+   (native viewport zoom, scroll momentum) while pdfExtras.js is
+   driving a live CSS transform for it — see pdfExtras.js. No CSS
+   transition on .pdf-pages-container itself (intentionally, see its
+   rule above) so the transform tracks finger movement 1:1 with zero
+   added lag. */
+.pdf-canvas-zone.pinching { touch-action: none; }
+
 /* Allow horizontal scroll generally (needed once zoomed past fit-width);
    a no-op visually at the default fit-width scale since there's nothing
    to overflow, but required for the pan tool / zoom-in to work at all. */

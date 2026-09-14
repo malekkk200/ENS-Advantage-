@@ -187,7 +187,13 @@ export const PDFViewer = (() => {
   }
 
   function _updateZoomLabel() {
-    _el('pdf-zoom-label').textContent = Math.round(_zoomLevel * 100) + '%';
+    // The zoom percentage pill was removed from the toolbar (zoom is
+    // now purely gesture-driven, Google-Drive-style, with no visible
+    // chrome) — this stays null-safe rather than being deleted outright
+    // in case a future build brings back some form of on-screen
+    // indicator.
+    const label = _el('pdf-zoom-label');
+    if (label) label.textContent = Math.round(_zoomLevel * 100) + '%';
   }
 
   /** Actually rasterize one page's canvas — called lazily by the IntersectionObserver */
@@ -359,6 +365,20 @@ export const PDFViewer = (() => {
   }
 
   /**
+   * Sets an EXACT zoom level (not a step) and commits it — shared by
+   * the public PDFViewer.setZoomLevel() and the hook handed to
+   * pdfExtras.js's pinch-to-zoom, which produces a continuous value
+   * from finger distance rather than a preset step.
+   */
+  async function _setZoomLevel(level) {
+    const clamped = Math.max(ZOOM_STEPS[0], Math.min(ZOOM_STEPS[ZOOM_STEPS.length - 1], level));
+    if (clamped === _zoomLevel) return;
+    _zoomLevel = clamped;
+    _updateZoomLabel();
+    await _rerenderAfterZoom();
+  }
+
+  /**
    * Shared tail-end of loading a document, regardless of whether its
    * pdf.js loadingTask was created from a network `url` or from
    * already-local cached `data` bytes: waits for the document to
@@ -388,12 +408,14 @@ export const PDFViewer = (() => {
     _scrollToPage(startPage);
 
     // Hand the freshly-built document/pages over to the TOC/search/
-    // dictionary/theme module — see pdfExtras.js.
+    // dictionary/theme/pinch-zoom module — see pdfExtras.js.
     PDFExtras.onDocumentReady({
       pdfDoc: _pdfDoc,
       pages: _pages,
       gotoPage: _scrollToPage,
       getScale: () => _baseScale * _zoomLevel,
+      getZoomLevel: () => _zoomLevel,
+      setZoomLevel: _setZoomLevel,
     });
   }
 
@@ -455,7 +477,7 @@ export const PDFViewer = (() => {
       const pageInput = _el('pdf-page-input');
       if (pageInput) { pageInput.value = ''; pageInput.disabled = true; }
       _el('pdf-page-total-num').textContent = '—';
-      _el('pdf-zoom-label').textContent = '100%';
+      { const label = _el('pdf-zoom-label'); if (label) label.textContent = '100%'; }
       _el('pdf-btn-prev').disabled = true;
       _el('pdf-btn-next').disabled = true;
       _el('pdf-canvas-zone').classList.remove('blurred');
@@ -828,6 +850,32 @@ export const PDFViewer = (() => {
       _zoomLevel = ZOOM_STEPS[nextIdx];
       _updateZoomLabel();
       await _rerenderAfterZoom();
+    },
+
+    /** Back to 100% — same commit path as zoom(), just a fixed target instead of a step. */
+    async resetZoom() {
+      if (_zoomLevel === 1.0) return;
+      _zoomLevel = 1.0;
+      _updateZoomLabel();
+      await _rerenderAfterZoom();
+    },
+
+    /**
+     * Sets an EXACT zoom level rather than stepping through ZOOM_STEPS
+     * — used by pinch-to-zoom (pdfExtras.js), which produces a
+     * continuous value from finger distance, not a preset step. Kept
+     * as a separate method from zoom() rather than overloading it,
+     * since callers here already know the exact target level and
+     * snapping it to the nearest preset would make a pinch gesture
+     * feel sticky/imprecise.
+     */
+    async setZoomLevel(level) {
+      await _setZoomLevel(level);
+    },
+
+    /** Current zoom level (1.0 = 100%) — read by pdfExtras.js's pinch-to-zoom to compute its starting point. */
+    getZoomLevel() {
+      return _zoomLevel;
     },
 
     /**
