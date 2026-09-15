@@ -22,10 +22,13 @@
    stale content immediately after their own upload.
 ═══════════════════════════════════════════════════════════════ */
 
-// Bump this on every deploy that changes shell files so old caches
-// get evicted in activate() below. Doesn't need to be meaningful —
-// just needs to change.
-const CACHE_VERSION = 'v4'; // bumped: backNav.js/content.js/pdfViewer.js changed (fixed back-nav-exits-to-Google bug) -- MUST bump this on every deploy that touches an APP_SHELL file below, or the cache-first fetch handler keeps serving the old cached bytes indefinitely (the SW itself never gets re-installed unless this file's own content changes)
+// Only affects /assets/ (truly immutable files, cache-first below) and
+// general cache housekeeping now — css/js/manifest.json correctness no
+// longer depends on this being bumped (see the network-first handler
+// below for why). Still fine to bump when you want to force-evict an
+// old cache bucket, just no longer required for a fix to actually reach
+// users.
+const CACHE_VERSION = 'v4';
 const CACHE_NAME = `ens-advantage-shell-${CACHE_VERSION}`;
 
 // Separate, independently-versioned cache for guide images. Kept apart
@@ -154,20 +157,52 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Static assets (css/js/icons): cache-first for instant loads,
-  // refreshing the cache in the background on every hit.
+  // Truly immutable assets (icons/logo under /assets/ — each has a
+  // fixed path and a 1-year immutable Cache-Control in vercel.json,
+  // same reasoning as the guide-images bucket above): cache-first is
+  // correct here because nothing under this path is ever republished
+  // in place.
+  if (url.pathname.startsWith('/assets/')) {
+    event.respondWith(
+      caches.match(request).then((cached) => {
+        const networkFetch = fetch(request)
+          .then((response) => {
+            if (response && response.ok) {
+              const copy = response.clone();
+              caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+            }
+            return response;
+          })
+          .catch(() => cached);
+        return cached || networkFetch;
+      })
+    );
+    return;
+  }
+
+  // Everything else in the shell (css/js/manifest.json): network-first,
+  // same pattern as the navigate handler above, and for the same
+  // reason — these files change on ordinary code deploys, and
+  // correctness here must NOT depend on a human remembering to bump
+  // CACHE_VERSION above every time one of them changes. (That's
+  // exactly the failure mode that once let an already-fixed,
+  // already-deployed bug keep reproducing for users: the fix shipped
+  // to the server, but the cache-first strategy kept serving the old
+  // cached bytes indefinitely because nothing forced a re-fetch.)
+  // Vercel's own Cache-Control on these paths is max-age=0,
+  // must-revalidate, so a same-content re-fetch when online is a
+  // cheap conditional GET (usually a 304), not a full re-download —
+  // the offline/PWA benefit is unchanged: a real network failure still
+  // falls back to whatever's cached.
   event.respondWith(
-    caches.match(request).then((cached) => {
-      const networkFetch = fetch(request)
-        .then((response) => {
-          if (response && response.ok) {
-            const copy = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-          }
-          return response;
-        })
-        .catch(() => cached);
-      return cached || networkFetch;
-    })
+    fetch(request)
+      .then((response) => {
+        if (response && response.ok) {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+        }
+        return response;
+      })
+      .catch(() => caches.match(request))
   );
 });
