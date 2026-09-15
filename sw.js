@@ -25,7 +25,7 @@
 // Bump this on every deploy that changes shell files so old caches
 // get evicted in activate() below. Doesn't need to be meaningful —
 // just needs to change.
-const CACHE_VERSION = 'v3'; // bumped: content.js/pdfViewer.js/index.html/css changed (app-download gate, watermark removal, on-device material cache)
+const CACHE_VERSION = 'v4'; // bumped: backNav.js/content.js/pdfViewer.js changed (fixed back-nav-exits-to-Google bug) -- MUST bump this on every deploy that touches an APP_SHELL file below, or the cache-first fetch handler keeps serving the old cached bytes indefinitely (the SW itself never gets re-installed unless this file's own content changes)
 const CACHE_NAME = `ens-advantage-shell-${CACHE_VERSION}`;
 
 // Separate, independently-versioned cache for guide images. Kept apart
