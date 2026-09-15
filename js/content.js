@@ -200,8 +200,20 @@ export const Content = {
     const mod  = this._pickerMod;
     const type = this._pickerType;
     if (!material || !mod) return;
-    this.close();
-    await PDFViewer.open(mod, type, material);
+
+    // Hide this overlay's own UI directly, WITHOUT going through
+    // close()/BackNav.notifyClose() — that calls the async
+    // history.back(), and PDFViewer.open() right below it would push a
+    // brand new history entry before that async back() actually landed,
+    // racing it (see backNav.js's replaceTop() doc for what that raced
+    // into). Passing { replaceBackNav: true } instead hands the SAME,
+    // already-pushed history entry over to the PDF viewer in one
+    // synchronous step.
+    $('content-overlay').classList.add('hidden');
+    unlockBodyScroll();
+    State.contentViewerActive = false;
+
+    await PDFViewer.open(mod, type, material, { replaceBackNav: true });
   },
 
   _summaryPlaceholder(mod) {

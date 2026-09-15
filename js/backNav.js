@@ -73,5 +73,33 @@ export const BackNav = {
   /** True while any overlay is open (i.e. we're not on the bare Home/Main screen). */
   hasOpenOverlay() {
     return this._stack.length > 0;
+  },
+
+  /**
+   * Swaps which close() handler answers for the CURRENTLY pushed history
+   * entry, without changing history depth. Use this when one overlay is
+   * being replaced by another at the same navigation "level" (e.g. a
+   * material picker immediately opening the chosen PDF) instead of
+   * calling notifyClose() (which triggers an async history.back()) and
+   * then push() (a synchronous history.pushState()) back to back.
+   *
+   * That close-then-push sequence used to be how this transition was
+   * handled, and it raced: history.back() only resolves on a later task,
+   * but the very next line's pushState() runs immediately — so the
+   * pushState could (and in practice did) land before the browser had
+   * actually traversed anywhere, leaving this module's internal stack
+   * out of sync with the real history position by one entry. The visible
+   * symptom: everything looked fine until the user's NEXT back press,
+   * which silently fell through an entry that no longer matched what was
+   * on screen, and the press after THAT exited the site straight to
+   * whatever page opened it (e.g. a Google search results page).
+   *
+   * replaceState() is synchronous and never triggers a popstate, so
+   * there's nothing here to race.
+   */
+  replaceTop(closeFn) {
+    if (this._stack.length === 0) { this.push(closeFn); return; }
+    history.replaceState({ ensOverlay: true }, '');
+    this._stack[this._stack.length - 1] = closeFn;
   }
 };

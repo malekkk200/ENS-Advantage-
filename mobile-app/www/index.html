@@ -967,13 +967,18 @@
                 onclick="App.PDFViewer.nextPage()" title="Next page" disabled>&#9654;</button>
       </div>
 
-      <!-- Zoom is intentionally NOT exposed here — pinch-to-zoom
-           (pdfExtras.js) is the only way to zoom, matching Google
-           Drive's mobile viewer: no visible zoom chrome at all, purely
-           gesture-driven. PDFViewer.zoom()/resetZoom()/setZoomLevel()
-           still exist as callable methods (setZoomLevel is what the
-           pinch gesture itself calls to commit), just nothing in this
-           toolbar calls zoom()/resetZoom() anymore. -->
+      <!-- Zoom controls — kept identical to the web toolbar (same ids,
+           same App.PDFViewer.zoom() calls) so zoom UI matches across
+           platforms. Pinch-to-zoom (pdfExtras.js) still works
+           alongside these buttons — both commit through the same
+           zoom level, so they never conflict. -->
+      <div class="pdf-zoom-group">
+        <button class="pdf-nav-btn" id="pdf-btn-zout"
+                onclick="App.PDFViewer.zoom(-1)" title="Zoom out">−</button>
+        <span class="pdf-page-pill" id="pdf-zoom-label">100%</span>
+        <button class="pdf-nav-btn" id="pdf-btn-zin"
+                onclick="App.PDFViewer.zoom(+1)" title="Zoom in">+</button>
+      </div>
 
       <!-- Reading tools: table of contents, search, pan/hand tool, dark/sepia theme -->
       <div class="pdf-tools-group">

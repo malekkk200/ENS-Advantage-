@@ -523,6 +523,18 @@ export const PDFExtras = (() => {
       _panActive = false; _panDragging = false;
       _el('pdf-canvas-zone')?.classList.remove('pan-mode', 'panning');
       _el('pdf-btn-pan')?.classList.remove('active');
+      // Mid-gesture close guard: if the viewer is closed while a pinch
+      // is still in progress (e.g. back-navigated with two fingers
+      // still down), the live CSS transform applied in _onPinchMove()
+      // would otherwise survive on this same, reused container element
+      // and make the NEXT document opened appear stuck at a stale
+      // scale until its own first pinch. Clear pointer/transform state
+      // unconditionally, same as the pan-mode reset just above.
+      _pinchPointers.clear();
+      _pinchStartDist = 0;
+      const pinchContainer = _el('pdf-pages-container');
+      if (pinchContainer) { pinchContainer.style.transform = ''; pinchContainer.style.transformOrigin = ''; }
+      _el('pdf-canvas-zone')?.classList.remove('pinching');
       this.closeSearch();
       _closeToc();
       _el('pdf-dict-popup')?.classList.add('hidden');

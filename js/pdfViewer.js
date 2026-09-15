@@ -411,8 +411,14 @@ export const PDFViewer = (() => {
      * @param {object} mod       Module object { name, … }
      * @param {string} type      'summary' | 'fullLesson' | 'guide'
      * @param {object} material  { id, title, storagePath } — one entry from CourseMaterials.getAll()
+     * @param {object} [opts]
+     * @param {boolean} [opts.replaceBackNav] When true, this open() takes over the
+     *   CURRENTLY pushed history entry (via BackNav.replaceTop()) instead of pushing
+     *   a new one. Pass this when replacing an already-open overlay (e.g. the
+     *   multi-material picker opening the chosen file) so the transition can't race
+     *   history.back()/pushState() — see backNav.js's replaceTop() doc.
      */
-    async open(mod, type, material) {
+    async open(mod, type, material, opts = {}) {
       // Bump the request generation immediately — anything from an
       // older, still-in-flight open() call checks this and bails out
       // rather than overwriting a newer open() that's already showing.
@@ -448,7 +454,8 @@ export const PDFViewer = (() => {
       // Show the overlay immediately so the user sees feedback at once
       _el('pdf-overlay').classList.remove('hidden');
       lockBodyScroll();
-      BackNav.push(() => this.close());
+      if (opts.replaceBackNav) BackNav.replaceTop(() => this.close());
+      else BackNav.push(() => this.close());
 
       State.pdfViewerActive = true;
       State.contentViewerActive = false; // mutually exclusive with HTML viewer
