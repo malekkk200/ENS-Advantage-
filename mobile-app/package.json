@@ -14,7 +14,7 @@
     "postinstall": "cd electron && npm ci && cd .."
   },
   "dependencies": {
-    "@aparajita/capacitor-secure-storage": "^7.1.6",
+    "@aparajita/capacitor-secure-storage": "^8.0.0",
     "@capacitor/android": "^7.0.0",
     "@capacitor/app": "^7.0.0",
     "@capacitor/core": "^7.0.0",
