@@ -1,0 +1,122 @@
+name: Build Desktop Apps (Windows + macOS)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'mobile-app/**'
+      - '.github/workflows/build-desktop.yml'
+  workflow_dispatch: {}
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: mobile-app/package-lock.json
+
+      # Runs `npm ci` in mobile-app AND (via its postinstall script)
+      # `npm ci` inside electron/ too, so both lockfiles are honored.
+      - name: Install Capacitor + Electron deps
+        working-directory: mobile-app
+        run: npm ci
+
+      - name: Sync Capacitor Electron (copies www/ into electron/app + generates the plugin manifest)
+        working-directory: mobile-app
+        run: npx cap sync @capawesome/capacitor-electron
+
+      # No target flag needed: electron-builder defaults to the
+      # current host's platform when none is passed, and this runner
+      # is Windows, so this builds only the `win.target` (nsis) from
+      # electron-builder.config.js.
+      #
+      # Signing (optional): unsigned by default -- the app works, but
+      # shows a Windows SmartScreen "unknown publisher" warning on
+      # first run. To sign, add these as GitHub Secrets:
+      #   WIN_CSC_LINK           -- base64 or URL of your .pfx certificate
+      #   WIN_CSC_KEY_PASSWORD   -- its password
+      # electron-builder picks up CSC_LINK/CSC_KEY_PASSWORD
+      # automatically when set and silently skips signing when they're
+      # empty -- no script changes needed either way.
+      - name: Build + package Windows installer
+        working-directory: mobile-app/electron
+        env:
+          CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: npm run pack
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: ens-advantage-windows-installer
+          path: |
+            mobile-app/electron/dist/*.exe
+          if-no-files-found: error
+
+  build-mac:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: mobile-app/package-lock.json
+
+      - name: Install Capacitor + Electron deps
+        working-directory: mobile-app
+        run: npm ci
+
+      - name: Sync Capacitor Electron (copies www/ into electron/app + generates the plugin manifest)
+        working-directory: mobile-app
+        run: npx cap sync @capawesome/capacitor-electron
+
+      # Same "no target flag needed" reasoning as Windows above, but
+      # for mac.target (dmg). A real .dmg can only be produced on
+      # actual macOS -- Apple's hdiutil has no cross-platform
+      # equivalent -- which is the whole reason this job exists as a
+      # separate macos-latest runner instead of building alongside
+      # Windows.
+      #
+      # Signing + notarization (optional): unsigned by default -- the
+      # app works, but macOS Gatekeeper blocks opening it normally
+      # (the user has to right-click -> Open once, then it's
+      # remembered). To sign and notarize, add these as GitHub Secrets:
+      #   MAC_CSC_LINK                  -- base64 of your .p12 certificate
+      #   MAC_CSC_KEY_PASSWORD          -- its password
+      #   APPLE_ID                      -- your Apple Developer account email
+      #   APPLE_APP_SPECIFIC_PASSWORD   -- an app-specific password for it
+      #   APPLE_TEAM_ID                 -- your Apple Developer Team ID
+      # electron-builder picks all of these up automatically when set.
+      # CSC_IDENTITY_AUTO_DISCOVERY=false stops it from searching this
+      # runner's empty keychain for a signing identity when none of
+      # the above are set -- without it, an unsigned build can fail
+      # instead of just proceeding unsigned.
+      - name: Build + package macOS installer
+        working-directory: mobile-app/electron
+        env:
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.MAC_CSC_LINK == '' && 'false' || 'true' }}
+        run: npm run pack
+
+      - name: Upload macOS installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: ens-advantage-macos-installer
+          path: |
+            mobile-app/electron/dist/*.dmg
+          if-no-files-found: error
