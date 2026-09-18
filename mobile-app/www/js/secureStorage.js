@@ -60,10 +60,67 @@ function withTimeout(promise, label) {
   });
 }
 
+// ── The plugin's ACTUAL native method surface ───────────────────
+// This is the bug that broke offline mode entirely, confirmed by the
+// on-device self-test (setItem returned false, getItem returned null
+// on a real device) and then against the plugin's own source:
+//
+// @aparajita/capacitor-secure-storage registers as 'SecureStorage',
+// but the methods it implements NATIVELY are internalSetItem /
+// internalGetItem / internalRemoveItem. The friendly setItem()/
+// getItem()/removeItem() names are implemented in the plugin's
+// JavaScript wrapper class (dist/esm/base.js), which we deliberately
+// don't load (this app has no bundler). Calling plugin.setItem(...)
+// straight over the Capacitor bridge therefore invoked a native
+// method that does not exist — every call rejected, setItem() returned
+// false, no encryption key could ever persist, and so NOTHING could
+// ever be cached. Every downstream "offline" symptom followed from
+// this single mismatch.
+//
+// Verified against the plugin's Android source
+// (android/src/main/java/com/aparajita/capacitor/securestorage/SecureStorage.java):
+//   internalSetItem({ prefixedKey, data, sync, access })  -> resolves empty
+//   internalGetItem({ prefixedKey, sync })                -> { data: string|null }
+//   internalRemoveItem({ prefixedKey, sync })             -> { success: boolean }
+//
+// The wrapper also PREFIXES every key with 'capacitor-storage_' before
+// handing it to native. We must apply the same prefix ourselves, or
+// keys written by one path wouldn't be found by the other.
+const KEY_PREFIX = 'capacitor-storage_'; // matches SecureStorageBase.prefix in the plugin's own JS wrapper
+const SYNC = false;                      // iOS Keychain iCloud-sync; the wrapper's default is false
+const ACCESS_WHEN_UNLOCKED = 0;          // KeychainAccess.whenUnlocked — iOS only, ignored on Android
+
+function prefixed(key) {
+  return KEY_PREFIX + String(key);
+}
+
+/**
+ * Reports which of the expected native methods the registered plugin
+ * actually exposes. Used by the offline self-test (offlineSelfTest.js)
+ * so a future plugin version that renames its native surface again is
+ * diagnosable in seconds instead of by another round of guessing —
+ * note there are open dependency bumps for this plugin to 8.x, which
+ * is exactly the kind of change that caused this bug.
+ */
+function methodSurface() {
+  const plugin = bridge();
+  if (!plugin) return { available: false, methods: [] };
+  const expected = ['internalSetItem', 'internalGetItem', 'internalRemoveItem', 'setItem', 'getItem', 'removeItem'];
+  return {
+    available: true,
+    methods: expected.filter((m) => typeof plugin[m] === 'function'),
+  };
+}
+
 export const SecureStorageBridge = {
   /** True only when running in the native app AND the plugin is registered. */
   isAvailable() {
     return !!bridge();
+  },
+
+  /** Diagnostic only — see methodSurface() above. */
+  describe() {
+    return methodSurface();
   },
 
   /** Returns the stored string, or null if absent / unavailable / on any error (including a timeout). Never throws. */
@@ -71,11 +128,14 @@ export const SecureStorageBridge = {
     const plugin = bridge();
     if (!plugin) { debugLog('getItem: plugin unavailable, key=', key); return null; }
     try {
-      const result = await withTimeout(plugin.getItem({ key }), `getItem(${key})`);
-      // The plugin's low-level getItem() returns { value } (mirrors
-      // @capacitor/preferences' shape by the author's own design —
-      // see its README) or null/undefined for a missing key.
-      const value = (result && typeof result.value === 'string') ? result.value : null;
+      const result = await withTimeout(
+        plugin.internalGetItem({ prefixedKey: prefixed(key), sync: SYNC }),
+        `getItem(${key})`
+      );
+      // Native resolves { data: <string> } or { data: null } for a
+      // missing key (NOT { value } — that was part of the original
+      // mismatch described above).
+      const value = (result && typeof result.data === 'string') ? result.data : null;
       debugLog('getItem key=', key, 'found=', value !== null);
       return value;
     } catch (err) {
@@ -90,7 +150,15 @@ export const SecureStorageBridge = {
     const plugin = bridge();
     if (!plugin) { debugLog('setItem: plugin unavailable, key=', key); return false; }
     try {
-      await withTimeout(plugin.setItem({ key, value: String(value) }), `setItem(${key})`);
+      await withTimeout(
+        plugin.internalSetItem({
+          prefixedKey: prefixed(key),
+          data: String(value),
+          sync: SYNC,
+          access: ACCESS_WHEN_UNLOCKED,
+        }),
+        `setItem(${key})`
+      );
       debugLog('setItem OK key=', key);
       return true;
     } catch (err) {
@@ -105,7 +173,10 @@ export const SecureStorageBridge = {
     const plugin = bridge();
     if (!plugin) return;
     try {
-      await withTimeout(plugin.removeItem({ key }), `removeItem(${key})`);
+      await withTimeout(
+        plugin.internalRemoveItem({ prefixedKey: prefixed(key), sync: SYNC }),
+        `removeItem(${key})`
+      );
       debugLog('removeItem OK key=', key);
     } catch (err) {
       debugLog('removeItem FAILED key=', key, 'err=', err?.message || err);

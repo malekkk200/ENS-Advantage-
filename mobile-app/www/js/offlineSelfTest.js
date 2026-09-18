@@ -55,6 +55,28 @@ export const OfflineSelfTest = {
     ));
 
     // 2. Native secure storage (where the AES key lives).
+    // Report the plugin's actual method surface first: a mismatch here
+    // between what the plugin exposes natively and what this app calls
+    // was the ACTUAL root cause of offline mode never working (the app
+    // called setItem/getItem, which only exist in the plugin's JS
+    // wrapper — natively it implements internalSetItem/internalGetItem).
+    // If this feature ever breaks again after a plugin upgrade, this
+    // line will say so immediately.
+    try {
+      const surface = SecureStorageBridge.describe();
+      const hasInternal = surface.methods.includes('internalSetItem') && surface.methods.includes('internalGetItem');
+      results.push(line(
+        surface.available && hasInternal,
+        'Secure storage plugin method surface',
+        !surface.available
+          ? 'Plugin NOT REGISTERED on this platform (expected on web/browser; a problem in the native app).'
+          : `exposes: ${surface.methods.join(', ') || '(none of the expected methods!)'}`
+            + (hasInternal ? '' : ' — MISSING internalSetItem/internalGetItem, which this app calls. The plugin API likely changed; secureStorage.js needs updating to match.')
+      ));
+    } catch (err) {
+      results.push(line(false, 'Secure storage plugin method surface', 'THREW: ' + (err?.message || err)));
+    }
+
     let secureOk = false;
     try {
       const probeKey = '__selftest_probe__';
