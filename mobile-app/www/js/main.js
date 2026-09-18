@@ -50,6 +50,7 @@ import { Community } from './community.js';
 import { Calc } from './calc.js';
 import { MemeSystem } from './memeSystem.js';
 import { MemeAdmin } from './memeAdmin.js';
+import { OfflineSelfTest } from './offlineSelfTest.js';
 import { BackNav } from './backNav.js';
 
 // Registers its own document-level 'mousedown' / 'keydown' listeners
@@ -61,7 +62,7 @@ import './nativeBridge.js';
    PUBLIC SURFACE — the only thing this module puts on `window`.
    Inline onclick="App.X.y()" handlers in the HTML call into this.
 ───────────────────────────────────────────────────────────── */
-window.App = { Auth, UI, Modules, Content, PDFViewer, PDFExtras, AdminPanel, Protection, Subscription, Community, Calc, State, MemeAdmin };
+window.App = { Auth, UI, Modules, Content, PDFViewer, PDFExtras, AdminPanel, Protection, Subscription, Community, Calc, State, MemeAdmin, OfflineSelfTest };
 
 /* ─────────────────────────────────────────────────────────────
    BOOT

@@ -103,16 +103,68 @@ if (navigator.storage?.persist) {
   navigator.storage.persist().catch(() => {});
 }
 
+// The account this device's cache key is bound to, remembered in
+// plain localStorage. This is NOT secret — it's a user id, the same
+// one already sitting in the auth session — and it exists purely so
+// secureKeyName() can return the SAME name on a cold offline launch
+// as it did when the files were originally encrypted.
+const KEY_OWNER_KEY = 'ensCacheKeyOwner_v1';
+
 function secureKeyName() {
   // Scoped per signed-in account, not just per device — if a second
   // student ever signs into the same physical device, their session
   // gets its own key and can't decrypt whatever the first student's
   // key encrypted (on top of clear() below already wiping everything
   // on logout).
-  return `lessonCacheKey_${State.currentUser?.id || 'anon'}`;
+  //
+  // CRITICAL: this must resolve to the same string on a cold offline
+  // launch as it did when the content was encrypted, or every cached
+  // file silently becomes undecryptable garbage and the whole offline
+  // feature appears to "just not work."
+  //
+  // It previously read State.currentUser?.id directly, falling back
+  // to the literal 'anon'. That fallback is reachable in normal use,
+  // not just when logged out: on a cold launch the auth session is
+  // restored ASYNCHRONOUSLY (see auth.js loadState -> getSession, and
+  // its offline path via Supabase.getStoredSessionUser, which itself
+  // awaits a native SecureStorage bridge call). Anything that touched
+  // the cache before that resolved — or any launch where the session
+  // restore failed or was slow while offline — computed
+  // 'lessonCacheKey_anon', a DIFFERENT key from the real
+  // 'lessonCacheKey_<uuid>' the files were written under. AES-GCM
+  // then fails authentication on decrypt, read() catches it, returns
+  // null, and the viewer reports "this lesson hasn't been downloaded
+  // yet" for content that is very much downloaded and sitting right
+  // there.
+  //
+  // Fix: remember the owning account id in localStorage the first
+  // time a key is created, and prefer that remembered value over the
+  // live (possibly not-yet-populated) State.currentUser. clear() —
+  // i.e. explicit logout — removes it, so the per-account isolation
+  // above still holds exactly as before.
+  const live = State.currentUser?.id;
+  if (live) {
+    // Signed in and known: authoritative. Record it for future cold
+    // launches, and (defensively) re-key if a DIFFERENT account is now
+    // signed in on this device than the one we had remembered.
+    try {
+      if (localStorage.getItem(KEY_OWNER_KEY) !== live) {
+        localStorage.setItem(KEY_OWNER_KEY, live);
+      }
+    } catch (_) {}
+    return `lessonCacheKey_${live}`;
+  }
+  // Not (yet) known — a cold launch mid-session-restore, or offline.
+  // Use the remembered owner so decryption still matches what wrote
+  // the files. Only genuinely-never-signed-in devices fall through to
+  // 'anon'.
+  let remembered = null;
+  try { remembered = localStorage.getItem(KEY_OWNER_KEY); } catch (_) {}
+  return `lessonCacheKey_${remembered || 'anon'}`;
 }
 
 let _cryptoKeyPromise = null; // memoized per this page-load; reset on logout (see resetCryptoKey)
+let _cryptoKeyName    = null; // the secureKeyName() the memoized promise above was resolved for
 
 // Guards against a hung native SecureStorage bridge call. Now that
 // write() is directly awaited in PDFViewer's critical path (not
@@ -146,9 +198,20 @@ function _withTimeout(promise, ms, label) {
  * never as "cache it unencrypted instead" (fail closed, not open).
  */
 function _getCryptoKey() {
+  const name = secureKeyName();
+  // Drop a memoized key that was resolved under a DIFFERENT name than
+  // the one now in effect. This matters on a cold launch: an early
+  // cache access can resolve a key before the async session restore
+  // has populated State.currentUser, and without this check that
+  // early (wrong-name) key would stay memoized for the entire session,
+  // failing every subsequent decrypt even after the correct identity
+  // became known. See secureKeyName() above.
+  if (_cryptoKeyPromise && _cryptoKeyName !== name) {
+    _cryptoKeyPromise = null;
+  }
   if (_cryptoKeyPromise) return _cryptoKeyPromise;
+  _cryptoKeyName = name;
   _cryptoKeyPromise = (async () => {
-    const name = secureKeyName();
     let raw = await SecureStorageBridge.getItem(name);
     if (!raw) {
       const bytes = crypto.getRandomValues(new Uint8Array(32));
@@ -162,7 +225,7 @@ function _getCryptoKey() {
   // Don't memoize a *failed* attempt — a transient secure-storage
   // hiccup shouldn't permanently disable caching for the rest of the
   // session; let the next read()/write() call retry from scratch.
-  _cryptoKeyPromise.catch(() => { _cryptoKeyPromise = null; });
+  _cryptoKeyPromise.catch(() => { _cryptoKeyPromise = null; _cryptoKeyName = null; });
   return _cryptoKeyPromise;
 }
 
@@ -262,6 +325,11 @@ export const MaterialCache = {
   async clear() {
     try { await caches.delete(CACHE_NAME); } catch (_) {}
     try { await SecureStorageBridge.removeItem(secureKeyName()); } catch (_) {}
+    // Forget which account this device's cache key belonged to — must
+    // happen AFTER the removeItem above, which relies on
+    // secureKeyName() still resolving to the outgoing account's name.
+    try { localStorage.removeItem(KEY_OWNER_KEY); } catch (_) {}
     _cryptoKeyPromise = null;
+    _cryptoKeyName = null;
   }
 };

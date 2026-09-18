@@ -48,6 +48,11 @@ export const AdminPanel = {
     if (btn) btn.classList.toggle('hidden', !_isAuthorizedAdmin());
     const memeBtn = $('meme-admin-dropdown-btn');
     if (memeBtn) memeBtn.classList.toggle('hidden', !_isAuthorizedAdmin());
+    // Offline diagnostics — admin-only, same gate as the two above.
+    // Read-only apart from one self-cleaning test entry; see
+    // offlineSelfTest.js.
+    const selfTestBtn = $('offline-selftest-btn');
+    if (selfTestBtn) selfTestBtn.classList.toggle('hidden', !_isAuthorizedAdmin());
   },
 
   open() {
