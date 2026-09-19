@@ -120,25 +120,13 @@ serve(async (req) => {
       return json({ error: `You already have access to one semester — you can only subscribe to ${remaining} now.` }, 409);
     }
 
-    // 4. Pricing + new-student 40% discount — determined server-side only.
-    //    The client never gets to say "I get the discount"; eligibility is
-    //    recomputed here from the source of truth (has this user_id ever
-    //    had an APPROVED subscription_requests row?). Rejected/pending
-    //    requests do not disqualify — only a past approved subscription does.
-    const BASE_PRICES_DZD: Record<string, number> = { S1: 2000, S2: 2000, BOTH: 3500 };
-    const DISCOUNT_RATE = 0.4;
-
-    const { count: approvedCount } = await supabaseAdmin
-      .from("subscription_requests")
-      .select("*", { count: "exact", head: true })
-      .eq("user_id", user.id)
-      .eq("status", "approved");
-
-    const isDiscountEligible = (approvedCount ?? 0) === 0;
-    const basePrice = BASE_PRICES_DZD[plan];
-    const amount_dzd = isDiscountEligible
-      ? Math.round(basePrice * (1 - DISCOUNT_RATE))
-      : basePrice;
+    // 4. Pricing — a single standing offer, the same price for every
+    //    student regardless of subscription history. There is no
+    //    "new student" eligibility tier anymore; this is the one and
+    //    only price, decided server-side (the client's displayed price
+    //    is informational only and never trusted here).
+    const PRICES_DZD: Record<string, number> = { S1: 1200, S2: 1200, BOTH: 2100 };
+    const amount_dzd = PRICES_DZD[plan];
 
     // 5. Duplicate transaction reference detection
     const { data: dup } = await supabaseAdmin
@@ -160,7 +148,7 @@ serve(async (req) => {
         full_name,
         plan,
         transaction_ref,
-        is_discounted: isDiscountEligible,
+        is_discounted: true, // kept for schema/history continuity — now always true, since the one standing price applies to everyone
         amount_dzd,
       });
 
@@ -169,7 +157,7 @@ serve(async (req) => {
       return json({ error: "Failed to submit request. Please try again." }, 500);
     }
 
-    return json({ success: true, is_discounted: isDiscountEligible, amount_dzd });
+    return json({ success: true, is_discounted: true, amount_dzd });
 
   } catch (err) {
     console.error("unhandled error:", err);

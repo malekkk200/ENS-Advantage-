@@ -32,7 +32,6 @@ export const State = {
   appGateOpen: false,
   selectedPlan: 'S1',
   subModalDefaultSemester: undefined,
-  discountEligible: false, // new-student 40%-off first-subscription offer
   // calculator
   calcActiveSem: 1,
   // misc

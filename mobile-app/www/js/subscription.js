@@ -6,7 +6,7 @@
 ═══════════════════════════════════════════════════════════════ */
 import { $ } from './dom.js';
 import { State } from './state.js';
-import { Supabase, sb } from './supabaseClient.js';
+import { Supabase } from './supabaseClient.js';
 import { BackNav } from './backNav.js';
 
 /* ─────────────────────────────────────────────────────────────
@@ -15,30 +15,14 @@ import { BackNav } from './backNav.js';
 const fmt = (n) => n.toLocaleString('en-US') + ' DZD';
 
 export const Subscription = {
-  BASE_PRICES: { S1: 2000, S2: 2000, BOTH: 3500 },
-  DISCOUNT_RATE: 0.4, // new-student first-subscription offer
+  // Single standing offer — one price per plan, the same for every
+  // student regardless of subscription history. No "new student"
+  // eligibility tier anymore; the price shown here is always exactly
+  // what submit-subscription charges server-side.
+  PRICES: { S1: 1200, S2: 1200, BOTH: 2100 },
 
-  discountedPrice(plan) {
-    return Math.round(this.BASE_PRICES[plan] * (1 - this.DISCOUNT_RATE));
-  },
   currentPrice(plan) {
-    return State.discountEligible ? this.discountedPrice(plan) : this.BASE_PRICES[plan];
-  },
-
-  /**
-   * "New student" = never had an APPROVED subscription before. This is only
-   * used to decide what to *show*; the real, trusted decision is always
-   * re-checked server-side in the submit-subscription Edge Function, which
-   * ignores anything the client claims.
-   */
-  async checkDiscountEligibility() {
-    if (!State.currentUser?.id) { State.discountEligible = false; return; }
-    const { count } = await sb
-      .from('subscription_requests')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', State.currentUser.id)
-      .eq('status', 'approved');
-    State.discountEligible = (count ?? 0) === 0;
+    return this.PRICES[plan];
   },
 
   /**
@@ -74,10 +58,6 @@ export const Subscription = {
     $('sub-modal').classList.remove('hidden');
     State.subModalOpen = true;
     BackNav.push(() => this.close());
-    // Show the modal immediately with list prices, then upgrade to the
-    // discounted view once eligibility comes back (usually instant).
-    this.updatePlanUI();
-    await this.checkDiscountEligibility();
     this.updatePlanUI();
   },
 
@@ -100,10 +80,6 @@ export const Subscription = {
   },
 
   updatePlanUI() {
-    const eligible = !!State.discountEligible;
-    const banner = $('discount-banner');
-    if (banner) banner.classList.toggle('hidden', !eligible);
-
     const eligiblePlans = this.eligiblePlans();
 
     ['S1', 'S2', 'BOTH'].forEach((id) => {
@@ -118,8 +94,7 @@ export const Subscription = {
       el.classList.toggle('selected', isEligible && id === State.selectedPlan);
 
       const priceEl = $('price-' + id);
-      if (!priceEl) return;
-      priceEl.textContent = eligible ? fmt(this.discountedPrice(id)) : fmt(this.BASE_PRICES[id]);
+      if (priceEl) priceEl.textContent = fmt(this.PRICES[id]);
     });
 
     const submitBtn = $('sub-submit-btn');
