@@ -16,6 +16,10 @@ const fmt = (n) => n.toLocaleString('en-US') + ' DZD';
 
 export const Subscription = {
   BASE_PRICES: { S1: 2000, S2: 2000, BOTH: 3500 },
+  // Standard (non-new-student) display: original list price + % off. The
+  // final prices are fixed exactly as BASE_PRICES above (not computed).
+  LIST_PRICES: { S1: 3000, S2: 3000, BOTH: 5400 },
+  LIST_DISCOUNT_PCT: { S1: 33, S2: 33, BOTH: 35 },
   DISCOUNT_RATE: 0.4, // new-student first-subscription offer
 
   discountedPrice(plan) {
@@ -119,6 +123,17 @@ export const Subscription = {
 
       const priceEl = $('price-' + id);
       const origEl = $('price-orig-' + id);
+      // Standard list-price row (struck original + % off). Hidden for
+      // eligible new students, who see the 40%-off view below instead.
+      const listRow = $('list-row-' + id);
+      if (listRow) {
+        listRow.classList.toggle('hidden', eligible);
+        const listPriceEl = $('price-list-' + id);
+        const listBadgeEl = $('list-badge-' + id);
+        if (listPriceEl) listPriceEl.textContent = fmt(this.LIST_PRICES[id]);
+        if (listBadgeEl) listBadgeEl.textContent = this.LIST_DISCOUNT_PCT[id] + '% OFF';
+      }
+
       if (!priceEl) return;
       if (eligible) {
         priceEl.textContent = fmt(this.discountedPrice(id));

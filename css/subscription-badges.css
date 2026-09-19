@@ -121,6 +121,17 @@
     color: var(--slate-400); text-decoration: line-through;
     margin-bottom: 1px;
   }
+  /* Standard list-price discount row (original price struck through + % badge) */
+  .plan-list-row { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem; margin-bottom: 2px; }
+  .plan-list-original {
+    font-size: .74rem; font-weight: 600;
+    color: var(--slate-400); text-decoration: line-through;
+  }
+  .plan-list-badge {
+    font-size: .62rem; font-weight: 800; letter-spacing: .03em;
+    color: #065f46; background: #d1fae5;
+    border-radius: 999px; padding: .1rem .45rem;
+  }
 
   /* ─── ELITE MEMBER BADGE (both semesters) — purple/violet, subtle/slow ─── */
   @keyframes eliteGlow {
