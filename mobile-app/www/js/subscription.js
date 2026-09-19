@@ -16,10 +16,10 @@ const fmt = (n) => n.toLocaleString('en-US') + ' DZD';
 
 export const Subscription = {
   // Single standing offer — one price per plan, the same for every
-  // student regardless of subscription history. No "new student"
-  // eligibility tier anymore; the price shown here is always exactly
-  // what submit-subscription charges server-side.
-  PRICES: { S1: 1200, S2: 1200, BOTH: 2100 },
+  // student regardless of subscription history. No discount tiers,
+  // no "new student" eligibility — the price shown here is always
+  // exactly what submit-subscription charges server-side.
+  PRICES: { S1: 2000, S2: 2000, BOTH: 3500 },
 
   currentPrice(plan) {
     return this.PRICES[plan];

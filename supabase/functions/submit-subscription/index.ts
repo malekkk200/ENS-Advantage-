@@ -121,11 +121,11 @@ serve(async (req) => {
     }
 
     // 4. Pricing — a single standing offer, the same price for every
-    //    student regardless of subscription history. There is no
-    //    "new student" eligibility tier anymore; this is the one and
-    //    only price, decided server-side (the client's displayed price
-    //    is informational only and never trusted here).
-    const PRICES_DZD: Record<string, number> = { S1: 1200, S2: 1200, BOTH: 2100 };
+    //    student regardless of subscription history. No discount
+    //    tiers, no eligibility check — this is the one and only
+    //    price, decided server-side (the client's displayed price is
+    //    informational only and never trusted here).
+    const PRICES_DZD: Record<string, number> = { S1: 2000, S2: 2000, BOTH: 3500 };
     const amount_dzd = PRICES_DZD[plan];
 
     // 5. Duplicate transaction reference detection
@@ -148,7 +148,7 @@ serve(async (req) => {
         full_name,
         plan,
         transaction_ref,
-        is_discounted: true, // kept for schema/history continuity — now always true, since the one standing price applies to everyone
+        is_discounted: false, // no discount tiers exist anymore — single standing price for everyone
         amount_dzd,
       });
 
@@ -157,7 +157,7 @@ serve(async (req) => {
       return json({ error: "Failed to submit request. Please try again." }, 500);
     }
 
-    return json({ success: true, is_discounted: true, amount_dzd });
+    return json({ success: true, is_discounted: false, amount_dzd });
 
   } catch (err) {
     console.error("unhandled error:", err);
