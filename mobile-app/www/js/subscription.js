@@ -16,10 +16,6 @@ const fmt = (n) => n.toLocaleString('en-US') + ' DZD';
 
 export const Subscription = {
   BASE_PRICES: { S1: 2000, S2: 2000, BOTH: 3500 },
-  // Display of the standard discount: original list price + % off. The
-  // final prices are fixed exactly as BASE_PRICES above (not computed).
-  LIST_PRICES: { S1: 3000, S2: 3000, BOTH: 5400 },
-  LIST_DISCOUNT_PCT: { S1: 33, S2: 33, BOTH: 35 },
   DISCOUNT_RATE: 0.4, // new-student first-subscription offer
 
   discountedPrice(plan) {
@@ -122,27 +118,8 @@ export const Subscription = {
       el.classList.toggle('selected', isEligible && id === State.selectedPlan);
 
       const priceEl = $('price-' + id);
-      const origEl = $('price-orig-' + id);
-      // Original list price + % off is always shown.
-      const listPriceEl = $('price-list-' + id);
-      const listBadgeEl = $('list-badge-' + id);
-      if (listPriceEl) listPriceEl.textContent = fmt(this.LIST_PRICES[id]);
-      if (listBadgeEl) listBadgeEl.textContent = this.LIST_DISCOUNT_PCT[id] + '% OFF';
-
-      // Eligible new students additionally see the 40% step on top.
-      const nsRow = $('ns-row-' + id);
-      if (nsRow) nsRow.classList.toggle('hidden', !eligible);
-      const nsBadge = $('ns-badge-' + id);
-      if (nsBadge) nsBadge.textContent = Math.round(this.DISCOUNT_RATE * 100) + '% OFF';
-
       if (!priceEl) return;
-      if (eligible) {
-        priceEl.textContent = fmt(this.discountedPrice(id));
-        if (origEl) { origEl.textContent = fmt(this.BASE_PRICES[id]); origEl.classList.remove('hidden'); }
-      } else {
-        priceEl.textContent = fmt(this.BASE_PRICES[id]);
-        if (origEl) origEl.classList.add('hidden');
-      }
+      priceEl.textContent = eligible ? fmt(this.discountedPrice(id)) : fmt(this.BASE_PRICES[id]);
     });
 
     const submitBtn = $('sub-submit-btn');
