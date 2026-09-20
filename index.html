@@ -713,7 +713,7 @@
               <div class="help-popover hidden" id="help-popover">
                 <div class="help-popover-section">
                   <span class="help-popover-label">:BaridiMob</span>
-                  <span class="font-arabic">يتم العثور على معرف المعاملة في تطبيق بريدي موب مباشرة بعد اتمام الدفع ، او عبر خيار اظهار الوصل تحت اسم Transaction ID</span>
+                  <span class="font-arabic">يتم العثور على معرف المعاملة في تطبيق بريدي موب مباشرة بعد اتمام عملية الدفع ، تحت اسم : External id</span>
                 </div>
                 <div class="help-popover-section" style="margin-bottom:0;">
                   <span class="help-popover-label">:(CCP) Algeria Post</span>
@@ -722,7 +722,7 @@
               </div>
             </div>
           </div>
-          <input class="form-input" type="text" id="tx-ref" placeholder="e.g. TXN-2024-XXXXXXXX" oninput="App.Subscription.updateSubmitBtn()" />
+          <input class="form-input" type="text" id="tx-ref" placeholder="" oninput="App.Subscription.updateSubmitBtn()" />
         </div>
         <button class="submit-btn" id="sub-submit-btn" onclick="App.Subscription.submit()" disabled>✓ Confirm Payment &amp; Activate</button>
       </div>
