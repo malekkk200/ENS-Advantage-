@@ -85,26 +85,7 @@
   }
   #plan-BOTH .plan-name { color: var(--navy); }
 
-  /* ─── NEW-STUDENT 40% DISCOUNT UI ─── */
-  @keyframes discountBannerGlow {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,.25); }
-    50%       { box-shadow: 0 0 0 5px rgba(245,158,11,0); }
-  }
-  .discount-banner {
-    background: linear-gradient(90deg, #fef3c7, #fde68a);
-    border: 1px solid #f59e0b;
-    color: #92400e;
-    font-size: .82rem; font-weight: 700;
-    padding: .65rem .9rem; border-radius: var(--radius-md);
-    margin-bottom: .85rem; text-align: center;
-    animation: discountBannerGlow 3.5s ease-in-out infinite;
-  }
-  .plan-price-original {
-    display: block; font-size: .74rem; font-weight: 600;
-    color: var(--slate-400); text-decoration: line-through;
-    margin-bottom: 1px;
-  }
-  /* Price rows: original price struck through + "% OFF" badge */
+  /* ─── FIRST-TIME SUBSCRIBER DISCOUNT (original price struck + % off) ─── */
   .plan-list-row { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem; margin-bottom: 2px; }
   .plan-list-original {
     font-size: .74rem; font-weight: 600;
@@ -115,7 +96,6 @@
     color: #065f46; background: #d1fae5;
     border-radius: 999px; padding: .1rem .45rem;
   }
-  .plan-list-badge-ns { color: #92400e; background: #fde68a; }
 
   /* ─── ELITE MEMBER BADGE (both semesters) — purple/violet, subtle/slow ─── */
   @keyframes eliteGlow {
