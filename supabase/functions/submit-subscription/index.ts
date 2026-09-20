@@ -120,13 +120,28 @@ serve(async (req) => {
       return json({ error: `You already have access to one semester — you can only subscribe to ${remaining} now.` }, 409);
     }
 
-    // 4. Pricing — a single standing offer, the same price for every
-    //    student regardless of subscription history. No discount
-    //    tiers, no eligibility check — this is the one and only
-    //    price, decided server-side (the client's displayed price is
-    //    informational only and never trusted here).
-    const PRICES_DZD: Record<string, number> = { S1: 2000, S2: 2000, BOTH: 3500 };
-    const amount_dzd = PRICES_DZD[plan];
+    // 4. Pricing — determined server-side only (the client's displayed
+    //    price is informational and never trusted).
+    //    The discount is ONLY for a student's FIRST subscription: a user
+    //    who has never had an APPROVED subscription_requests row pays the
+    //    discounted (final) price; anyone who already subscribed before
+    //    pays the original price. Pending/rejected requests do not count.
+    const ORIGINAL_PRICES_DZD: Record<string, number> = { S1: 3000, S2: 3000, BOTH: 5400 };
+    const FIRST_TIME_PRICES_DZD: Record<string, number> = { S1: 2000, S2: 2000, BOTH: 3500 };
+
+    const { count: approvedCount, error: approvedErr } = await supabaseAdmin
+      .from("subscription_requests")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("status", "approved");
+
+    if (approvedErr) {
+      console.error("eligibility check error:", approvedErr);
+      return json({ error: "Could not verify your subscription history. Please try again." }, 500);
+    }
+
+    const isFirstTime = (approvedCount ?? 0) === 0;
+    const amount_dzd = isFirstTime ? FIRST_TIME_PRICES_DZD[plan] : ORIGINAL_PRICES_DZD[plan];
 
     // 5. Duplicate transaction reference detection
     const { data: dup } = await supabaseAdmin
@@ -148,7 +163,7 @@ serve(async (req) => {
         full_name,
         plan,
         transaction_ref,
-        is_discounted: false, // no discount tiers exist anymore — single standing price for everyone
+        is_discounted: isFirstTime,
         amount_dzd,
       });
 
@@ -157,7 +172,7 @@ serve(async (req) => {
       return json({ error: "Failed to submit request. Please try again." }, 500);
     }
 
-    return json({ success: true, is_discounted: false, amount_dzd });
+    return json({ success: true, is_discounted: isFirstTime, amount_dzd });
 
   } catch (err) {
     console.error("unhandled error:", err);

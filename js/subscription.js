@@ -6,7 +6,7 @@
 ═══════════════════════════════════════════════════════════════ */
 import { $ } from './dom.js';
 import { State } from './state.js';
-import { Supabase } from './supabaseClient.js';
+import { Supabase, sb } from './supabaseClient.js';
 import { BackNav } from './backNav.js';
 
 /* ─────────────────────────────────────────────────────────────
@@ -15,14 +15,30 @@ import { BackNav } from './backNav.js';
 const fmt = (n) => n.toLocaleString('en-US') + ' DZD';
 
 export const Subscription = {
-  // Single standing offer — one price per plan, the same for every
-  // student regardless of subscription history. No discount tiers,
-  // no "new student" eligibility — the price shown here is always
-  // exactly what submit-subscription charges server-side.
-  PRICES: { S1: 2000, S2: 2000, BOTH: 3500 },
+  // Original price of each plan.
+  ORIGINAL_PRICES: { S1: 3000, S2: 3000, BOTH: 5400 },
+  // First-time subscribers only: the discount and the FINAL price they
+  // pay (written exactly, not computed). Must match submit-subscription.
+  DISCOUNT_PCT: { S1: 33, S2: 33, BOTH: 35 },
+  DISCOUNTED_PRICES: { S1: 2000, S2: 2000, BOTH: 3500 },
+
+  // true = has never had an APPROVED subscription -> gets the discount.
+  // Display only; submit-subscription re-decides this server-side.
+  firstTime: false,
 
   currentPrice(plan) {
-    return this.PRICES[plan];
+    return this.firstTime ? this.DISCOUNTED_PRICES[plan] : this.ORIGINAL_PRICES[plan];
+  },
+
+  async checkFirstTime() {
+    if (!State.currentUser?.id) { this.firstTime = false; return; }
+    const { count, error } = await sb
+      .from('subscription_requests')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', State.currentUser.id)
+      .eq('status', 'approved');
+    // On error, don't promise a discount we couldn't verify.
+    this.firstTime = !error && (count ?? 0) === 0;
   },
 
   /**
@@ -58,6 +74,11 @@ export const Subscription = {
     $('sub-modal').classList.remove('hidden');
     State.subModalOpen = true;
     BackNav.push(() => this.close());
+    // Show the modal immediately, then update prices once we know whether
+    // this is the student's first subscription (usually instant).
+    this.firstTime = false;
+    this.updatePlanUI();
+    await this.checkFirstTime();
     this.updatePlanUI();
   },
 
@@ -94,7 +115,17 @@ export const Subscription = {
       el.classList.toggle('selected', isEligible && id === State.selectedPlan);
 
       const priceEl = $('price-' + id);
-      if (priceEl) priceEl.textContent = fmt(this.PRICES[id]);
+      if (priceEl) priceEl.textContent = fmt(this.currentPrice(id));
+
+      // First-time subscribers: original price struck through + % off.
+      const listRow = $('list-row-' + id);
+      if (listRow) {
+        listRow.classList.toggle('hidden', !this.firstTime);
+        const origEl = $('price-orig-' + id);
+        const badgeEl = $('list-badge-' + id);
+        if (origEl) origEl.textContent = fmt(this.ORIGINAL_PRICES[id]);
+        if (badgeEl) badgeEl.textContent = this.DISCOUNT_PCT[id] + '% OFF';
+      }
     });
 
     const submitBtn = $('sub-submit-btn');
