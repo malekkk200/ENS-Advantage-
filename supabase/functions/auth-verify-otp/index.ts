@@ -103,14 +103,13 @@ Deno.serve(async (req) => {
     // Mark OTP as used immediately
     await sb.from('otp_codes').update({ used: true }).eq('id', data.id);
 
-    // If this OTP was issued for an existing-account re-registration
-    // (see auth-signup), the new password only gets applied now — after
-    // the code for this exact email has been proven correct.
-    if (data.pending_password) {
-      // listUsers() only returns one page (max 1000) per call with no
-      // server-side email filter — walk pages until found or exhausted
-      // so this doesn't silently miss a real user past the first 1000.
-      let user: { id: string } | undefined;
+    // Look up the auth user now — needed both for the pending_password
+    // branch below AND for the user_profiles self-heal that follows it.
+    // listUsers() only returns one page (max 1000) per call with no
+    // server-side email filter — walk pages until found or exhausted
+    // so this doesn't silently miss a real user past the first 1000.
+    let user: { id: string; user_metadata?: Record<string, unknown> } | undefined;
+    {
       let page = 1;
       for (;;) {
         const { data: pageData, error: pageErr } = await sb.auth.admin.listUsers({ page, perPage: 1000 });
@@ -119,6 +118,12 @@ Deno.serve(async (req) => {
         if (user || !pageData?.users || pageData.users.length < 1000) break;
         page++;
       }
+    }
+
+    // If this OTP was issued for an existing-account re-registration
+    // (see auth-signup), the new password only gets applied now — after
+    // the code for this exact email has been proven correct.
+    if (data.pending_password) {
       if (user) {
         const { error: pwErr } = await sb.auth.admin.updateUserById(user.id, {
           password: data.pending_password,
@@ -130,6 +135,39 @@ Deno.serve(async (req) => {
       }
       // Never leave the plaintext password sitting in the table longer than necessary.
       await sb.from('otp_codes').update({ pending_password: null }).eq('id', data.id);
+    }
+
+    // ── Self-heal a missing user_profiles row ──────────────────────────────
+    // Bug: some accounts (created before the auth-signup upsert existed, or
+    // hitting any other edge case where that upsert silently failed) have an
+    // auth.users row but no public.user_profiles row. The client can never
+    // repair this itself — user_profiles has RLS policies that deny client
+    // insert/update entirely (service-role only) — and the "existing
+    // account" branch of auth-signup deliberately skips touching
+    // user_profiles for security reasons (see comment there). This left
+    // affected users permanently stuck with a blank "?" avatar and no name,
+    // even though login itself succeeded.
+    // Every successful OTP verification (fresh signup OR re-verification of
+    // an existing account) now runs this upsert with ignoreDuplicates:true,
+    // so it's a no-op when a profile already exists and a one-time repair
+    // when it doesn't — using whatever name/dob is on the auth user's
+    // metadata (set at original signup) as the source of truth.
+    if (user) {
+      const meta = (user.user_metadata ?? {}) as Record<string, unknown>;
+      const { error: healErr } = await sb
+        .from('user_profiles')
+        .upsert(
+          {
+            id: user.id,
+            first_name: (meta.first_name as string) || '',
+            last_name: (meta.last_name as string) || '',
+            dob: (meta.dob as string) || null,
+          },
+          { onConflict: 'id', ignoreDuplicates: true },
+        );
+      if (healErr) {
+        console.error('user_profiles self-heal upsert failed:', healErr.message, healErr.details);
+      }
     }
 
     // Generate a one-time magic-link token so the client can open a session
