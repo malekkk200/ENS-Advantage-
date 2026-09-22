@@ -121,11 +121,33 @@ export const Auth = {
 
   async loadProfile() {
     if (!State.currentUser) return;
-    const { data } = await sb
+    let { data } = await sb
       .from('user_profiles')
       .select('*')
       .eq('id', State.currentUser.id)
       .single();
+    if (!data) {
+      // Missing profile row — should be rare (a DB trigger creates this on
+      // every signup, and auth-verify-otp self-heals it on every OTP-based
+      // login), but a plain password login / cold-launch session resume
+      // never touches either of those, so if a row is ever missing for
+      // any other reason, repair it here too. RLS forbids the client from
+      // writing user_profiles itself, so this is proxied through a
+      // service-role function that can only ever touch the caller's own
+      // row. See supabase/functions/ensure-profile/index.ts.
+      // Wrapped so a network hiccup here (e.g. offline cold-launch) just
+      // falls back to today's existing (silent) behavior — the offline
+      // profile cache restore in loadState() already covers that case —
+      // instead of throwing into callers that still need to keep going.
+      try {
+        await Supabase.callFunction('ensure-profile', {});
+        ({ data } = await sb
+          .from('user_profiles')
+          .select('*')
+          .eq('id', State.currentUser.id)
+          .single());
+      } catch (e) { console.error('loadProfile (ensure-profile fallback):', e); }
+    }
     if (data) {
       State.currentProfile = data;
       try {
